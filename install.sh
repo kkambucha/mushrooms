@@ -2,6 +2,9 @@
 # Mushrooms — interactive installer for nginx + 3x-ui (VLESS TLS TCP + WS)
 # Target: Ubuntu 20.04+ (Debian-compatible)
 # Usage: sudo bash install.sh
+#
+# Leave wizard fields empty → MINIMAL: clean 3x-ui panel only.
+# Fill domain+country+path+UUID+subId → FULL: site + inbounds + HTTPS subscription.
 
 set -euo pipefail
 
@@ -31,8 +34,12 @@ main() {
 
   echo
   echo "╔══════════════════════════════════════════════╗"
-  echo "║  Mushrooms installer — 3x-ui VLESS TLS       ║"
+  echo "║  Mushrooms installer — 3x-ui                 ║"
   echo "╚══════════════════════════════════════════════╝"
+  echo
+  echo "Source (this script): ${REPO_DIR}"
+  echo "Runtime (after success): ${DEPLOY_DIR}"
+  echo "  → /opt/mushrooms is created only after dependencies succeed."
   echo
 
   ask_config
@@ -48,26 +55,28 @@ main() {
 
   prepare_deploy_dir
 
-  # Certificates + nginx bootstrap
-  if [[ "$CERT_MODE" == "paste" ]]; then
-    write_pasted_certs
-    build_nginx_https
-    compose_up
+  if [[ "${ENABLE_SITE}" == "true" ]]; then
+    if [[ "$CERT_MODE" == "paste" ]]; then
+      write_pasted_certs
+      build_nginx_https
+      compose_up
+    else
+      write_self_signed_placeholder
+      build_nginx_http_only
+      compose_up
+      sleep 2
+      issue_letsencrypt
+      build_nginx_https
+      compose_restart_nginx
+      install_cert_renew_hook
+    fi
   else
-    # HTTP-only nginx first for ACME challenge
-    write_self_signed_placeholder
-    build_nginx_http_only
+    remove_cert_renew_hook
     compose_up
-    sleep 2
-    issue_letsencrypt
-    build_nginx_https
-    compose_restart_nginx
-    install_cert_renew_hook
   fi
 
-  # Ensure 3x-ui is up (compose_up already started it; restart after certs ready)
   cd "${DEPLOY_DIR}"
-  docker compose up -d
+  docker compose up -d --remove-orphans
   wait_for_panel
 
   panel_init_cookie
@@ -75,13 +84,19 @@ main() {
 
   panel_bootstrap_auth
   panel_change_credentials
-  panel_configure_subscription
-  create_inbounds
-  verify_subscription_https
+
+  if [[ "${INSTALL_MODE}" == "full" ]]; then
+    panel_configure_subscription
+    create_inbounds
+    verify_subscription_https
+  else
+    log "MINIMAL mode — skipping inbound/subscription API setup (configure in the panel UI)"
+  fi
 
   write_summary
 
-  log "Done."
+  log "Done. Deploy directory: ${DEPLOY_DIR}"
+  log "Next: cd ${DEPLOY_DIR} && docker compose ps"
 }
 
 main "$@"

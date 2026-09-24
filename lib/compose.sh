@@ -11,11 +11,25 @@ prepare_deploy_dir() {
     "${DEPLOY_DIR}/data/db" \
     "${DEPLOY_DIR}/generated"
 
-  # Copy static site
   cp -a "${REPO_DIR}/templates/site/." "${DEPLOY_DIR}/site/"
 
-  # Compose file
-  cp "${REPO_DIR}/templates/docker-compose.yml.tpl" "${DEPLOY_DIR}/docker-compose.yml"
+  if [[ "${ENABLE_SITE:-false}" == "true" ]]; then
+    cp "${REPO_DIR}/templates/docker-compose.yml.tpl" "${DEPLOY_DIR}/docker-compose.yml"
+  else
+    # Clean panel only — no nginx service
+    cp "${REPO_DIR}/templates/docker-compose.3xui-only.yml.tpl" "${DEPLOY_DIR}/docker-compose.yml"
+    # Placeholder certs dir so the volume mount exists
+    if [[ ! -f "${DEPLOY_DIR}/certs/fullchain.pem" ]]; then
+      openssl req -x509 -nodes -newkey rsa:2048 -days 3650 \
+        -keyout "${DEPLOY_DIR}/certs/privkey.pem" \
+        -out "${DEPLOY_DIR}/certs/fullchain.pem" \
+        -subj "/CN=localhost" >/dev/null 2>&1 || true
+      chmod 644 "${DEPLOY_DIR}/certs/fullchain.pem" 2>/dev/null || true
+      chmod 600 "${DEPLOY_DIR}/certs/privkey.pem" 2>/dev/null || true
+    fi
+  fi
+
+  log "Deploy directory ready: ${DEPLOY_DIR}"
 }
 
 build_nginx_http_only() {
@@ -75,10 +89,11 @@ render_nginx() {
 }
 
 compose_up() {
-  log "Starting Docker Compose"
+  log "Starting Docker Compose in ${DEPLOY_DIR}"
   cd "${DEPLOY_DIR}"
   docker compose pull
-  docker compose up -d
+  # Drop services removed from compose (e.g. nginx after downgrade to MINIMAL)
+  docker compose up -d --remove-orphans
 }
 
 compose_restart_nginx() {
@@ -103,7 +118,9 @@ wait_for_panel() {
 }
 
 stop_conflicting_web() {
-  # Free 80/443 if system nginx/apache is running
+  if [[ "${ENABLE_SITE:-false}" != "true" ]]; then
+    return 0
+  fi
   if systemctl is-active --quiet nginx 2>/dev/null; then
     warn "Stopping system nginx to free ports 80/443"
     systemctl stop nginx || true

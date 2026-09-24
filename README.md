@@ -1,89 +1,127 @@
-# Mushrooms — 3x-ui VLESS TLS installer
+# Mushrooms — 3x-ui installer
 
-Interactive console installer for Ubuntu 20.04+ that deploys:
+Interactive installer for Ubuntu 20.04+ that deploys **3x-ui** (and optionally nginx + auto VPN inbounds).
 
-- **nginx** — static maintenance site on 80/443 (Fungi Encyclopedia page)
-- **certbot** — Let's Encrypt (or paste your own PEM)
-- **3x-ui** — panel on `:2053` with two VLESS+TLS inbounds (TCP + WebSocket)
+> Not Reality/Selfsteal. FULL mode uses ordinary VLESS+TLS with certs under `/etc/3x-ui/certs/`.
 
-> This is **not** Reality/Selfsteal. Inbounds use ordinary TLS with certificates under `/etc/3x-ui/certs/`.
+## Two install modes
 
-## Server prerequisites
+| Mode | When | What you get |
+|------|------|----------------|
+| **MINIMAL** | Leave wizard fields empty (or omit VPN fields) | Clean 3x-ui on `:2053` — configure inbounds/subscription in the panel UI |
+| **FULL** | Fill domain + country + sub path + UUID + subId | Site on 443 + HTTPS subscription + TCP/WS inbounds |
 
-- Fresh Ubuntu 20.04+ VPS (root / sudo)
-- Domain **A-record** already pointing at the VPS IP
-- Outbound HTTPS (Docker Hub / ghcr.io / Let's Encrypt)
+## Prepare the VPS (git + Docker)
+
+```bash
+sudo apt update
+sudo apt install -y git ca-certificates curl
+
+# Official Docker (engine + compose plugin). Prefer this over distro packages.
+curl -fsSL https://get.docker.com | sudo sh
+sudo systemctl enable --now docker
+
+# Must succeed before install / before any docker compose commands:
+docker compose version
+```
+
+**Do not** run `apt install docker-compose-plugin` unless the official Docker apt repo is already configured — Ubuntu’s default repos often return `Unable to locate package docker-compose-plugin`.
+
+`install.sh` will also install/repair Docker via `get.docker.com` if needed.
 
 ## Install
 
 ```bash
-# On the VPS — copy this repo, then:
-cd /path/to/mushrooms
-sudo bash install.sh
-```
-
-Examples:
-
-```bash
-# scp / rsync the project, or:
+# Clone or copy this repo (source tree):
 git clone <YOUR_REPO_URL> /opt/mushrooms-src
 cd /opt/mushrooms-src
 sudo bash install.sh
 ```
 
-Runtime files (compose, certs, site, DB) live in **`/opt/mushrooms`** by default (`DEPLOY_DIR`).
+Press Enter through the wizard for **MINIMAL** (clean panel). Fill all VPN fields for **FULL**.
 
-## Wizard prompts
+Wait until you see `Done.` and a path to `DEPLOY.txt`.
 
-| Prompt | Default |
-|--------|---------|
-| Domain | required |
-| Country label (client email) | required |
-| Subscription path name | required |
-| Client UUID | required |
-| Subscription ID (`subId`) | required |
-| Client comment | optional (empty) |
-| TCP / WS ports | random 20000–50000 |
-| Panel admin user/password | random |
-| Certificates | empty → Let's Encrypt; or paste PEM |
+## Source vs runtime directories
 
-At the end the installer prints a sheet and writes `/opt/mushrooms/DEPLOY.txt`.
+| Path | Role |
+|------|------|
+| `/opt/mushrooms-src` (or wherever you cloned) | Installer source (`install.sh`, templates) |
+| `/opt/mushrooms` (`DEPLOY_DIR`) | Runtime: `docker-compose.yml`, certs, site, DB, `DEPLOY.txt` |
 
-## Subscription URL shape
+**Important:** `/opt/mushrooms` is created **only after dependencies succeed**. If install dies on Docker/compose, that directory does not exist yet — that is expected.
 
-3x-ui serves subscriptions on **HTTPS port 2096** (TLS via the same domain certs):
+### Troubleshooting paths
+
+**`cd: /opt/mushrooms: No such file or directory`**
+
+Install did not finish past deps. Fix Docker (`docker compose version`), then:
+
+```bash
+cd /opt/mushrooms-src
+sudo bash install.sh
+ls /opt/mushrooms
+cat /opt/mushrooms/DEPLOY.txt
+```
+
+**`no configuration file provided: not found`**
+
+You ran `docker compose` from the **source** tree. Use the runtime dir:
+
+```bash
+cd /opt/mushrooms
+docker compose ps
+# or:
+docker compose -f /opt/mushrooms/docker-compose.yml ps
+```
+
+**`restart nginx` fails in MINIMAL**
+
+There is no nginx service without a domain. Use `docker compose restart 3xui` only.
+
+## After a successful install
+
+```bash
+cd /opt/mushrooms
+docker compose ps
+docker compose logs -f
+docker compose restart 3xui
+# only if you set a domain (site/nginx installed):
+docker compose restart nginx
+```
+
+- Panel: `http://YOUR_IP:2053` (credentials in `DEPLOY.txt`)
+- MINIMAL: create inbounds/subscription yourself in the panel
+- FULL: subscription URL and client details are in `DEPLOY.txt`
+
+## Wizard fields
+
+| Prompt | Empty Enter |
+|--------|-------------|
+| Domain | OK → no nginx/site |
+| Country, sub path, UUID, subId | OK → MINIMAL; all filled (+ domain) → FULL |
+| Comment | OK |
+| TCP / WS ports | Asked only in FULL (random default) |
+| Panel admin user/password | Random if empty |
+| Certificates | Asked only if domain set (empty → Let's Encrypt) |
+
+## FULL mode notes
+
+Subscription URL shape:
 
 `https://YOUR_DOMAIN:2096/<subscription-path>/<subId>`
 
-The wizard “subscription path name” is the middle segment. Panel UI stays on `:2053`.
+For client migration, enter the same domain / path / subId / UUID as the existing subscription URL; point DNS A at this VPS first.
 
-### Migrating existing clients
+## Security
 
-Enter the **same** Domain, subscription path, and `subId` as in the URL already configured on clients (and the same client UUID if you want the same profile). Point DNS A at the new VPS first. Clients keep the old subscription URL; a refresh pulls new VLESS links (new ports) with no client-side URL change.
-
-## After install
-
-- Site: `https://YOUR_DOMAIN/`
-- Panel: `http://YOUR_DOMAIN:2053` (credentials in `DEPLOY.txt`)
-- Subscription URL: printed in `DEPLOY.txt`
-
-Replace the maintenance page anytime:
-
-```bash
-nano /opt/mushrooms/site/index.html
-# no restart needed for static HTML; or:
-cd /opt/mushrooms && docker compose restart nginx
-```
-
-## Security notes
-
-- Panel listens publicly on **HTTP :2053**. Protect with a strong password and/or firewall IP allowlist.
-- Prefer restricting `:2053` and `:2096` in UFW to your admin IPs when possible.
+- Panel is **HTTP** on `:2053` — strong password and/or firewall allowlist.
+- Prefer restricting `:2053` / `:2096` to your admin IPs when possible.
 
 ## Layout
 
 ```
 install.sh
-lib/           # bash modules
-templates/     # compose, nginx, inbound JSON, site/
+lib/
+templates/     # compose (full + 3xui-only), nginx, inbound JSON, site/
 ```

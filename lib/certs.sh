@@ -76,3 +76,11 @@ PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 0 3 * * * root certbot renew --config-dir ${DEPLOY_DIR}/certbot/config --work-dir ${DEPLOY_DIR}/certbot/work --logs-dir ${DEPLOY_DIR}/certbot/logs --quiet
 EOF
 }
+
+# Remove LE renew cron/hook leftovers when downgrading to no-site (MINIMAL without domain)
+remove_cert_renew_hook() {
+  if [[ -f /etc/cron.d/mushrooms-certbot ]]; then
+    log "Removing stale certbot cron (/etc/cron.d/mushrooms-certbot)"
+    rm -f /etc/cron.d/mushrooms-certbot
+  fi
+}
