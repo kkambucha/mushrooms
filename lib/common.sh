@@ -9,12 +9,17 @@ die()  { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
 rand_hex() {
   local n="${1:-16}"
-  openssl rand -hex "$(( (n + 1) / 2 ))" | head -c "$n"
+  local s
+  s="$(openssl rand -hex "$(( (n + 1) / 2 ))")"
+  printf '%s' "${s:0:${n}}"
 }
 
 rand_alnum() {
   local n="${1:-16}"
-  tr -dc 'a-z0-9' </dev/urandom | head -c "$n"
+  local s
+  # hex is 0-9a-f — fine for path-ish tokens; no tr|head (SIGPIPE + pipefail)
+  s="$(openssl rand -hex "$n")"
+  printf '%s' "${s:0:${n}}"
 }
 
 rand_port() {
@@ -23,7 +28,10 @@ rand_port() {
 }
 
 rand_password() {
-  tr -dc 'A-Za-z0-9' </dev/urandom | head -c 20
+  local n="${1:-20}"
+  local s
+  s="$(openssl rand -hex "$n")"
+  printf '%s' "${s:0:${n}}"
 }
 
 prompt() {
