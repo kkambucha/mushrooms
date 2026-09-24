@@ -23,4 +23,5 @@ services:
     environment:
       XRAY_VMESS_AEAD_FORCED: "false"
       XUI_ENABLE_FAIL2BAN: "false"
+      XUI_INIT_WEB_BASE_PATH: "/"
     tty: true

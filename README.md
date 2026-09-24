@@ -90,9 +90,25 @@ docker compose restart 3xui
 docker compose restart nginx
 ```
 
-- Panel: `http://YOUR_IP:2053` (credentials in `DEPLOY.txt`)
+- Panel admin: **`http://YOUR_IP:2053/`** (plain HTTP, root path — credentials in `DEPLOY.txt`)
+- Do **not** use `https://…:2053/…/sub/…` for the admin UI — that is the subscription endpoint shape (`:2096`), not the panel
 - MINIMAL: create inbounds/subscription yourself in the panel
 - FULL: subscription URL and client details are in `DEPLOY.txt`
+
+### Panel password / existing DB
+
+Installer always resets panel username/password to wizard values via `docker exec … x-ui setting` (no need to know the old password).
+
+If you wiped DB and ran `docker compose up` **before** finishing `install.sh`, the panel may have created its own first-boot user. Just re-run install — it will force wizard credentials. Or on the server:
+
+```bash
+cd /opt/mushrooms
+docker exec mushrooms_3xui /app/x-ui setting -username admin -password 'YOUR_PASS'
+docker compose restart 3xui
+# then open http://YOUR_IP:2053/  and/or finish install.sh
+```
+
+Prefer letting `install.sh` finish before manually starting compose after a DB wipe.
 
 ## Wizard fields
 

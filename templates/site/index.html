@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fungi Encyclopedia — Under Maintenance</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500&family=Work+Sans:wght@400;500&display=swap');
+
+  :root{
+    --bg-0:#141a11;
+    --bg-1:#1b2216;
+    --ink:#efe7d2;
+    --muted:#a7ae91;
+    --cap:#a8431f;
+    --cap-dark:#7f3016;
+    --moss:#77874d;
+    --line:rgba(239,231,210,0.16);
+  }
+
+  *{ box-sizing:border-box; }
+
+  html,body{
+    height:100%;
+    margin:0;
+  }
+
+  body{
+    background:
+      radial-gradient(ellipse 90% 65% at 50% 18%, var(--bg-1), var(--bg-0) 70%);
+    color:var(--ink);
+    font-family:'Work Sans', system-ui, sans-serif;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    min-height:100vh;
+    padding:6vh 6vw;
+  }
+
+  main{
+    width:100%;
+    max-width:30rem;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    text-align:center;
+  }
+
+  .mark{
+    font-size:0.8rem;
+    letter-spacing:0.02em;
+    color:var(--muted);
+    margin-bottom:2.2rem;
+  }
+
+  .mark::before{
+    content:"";
+    display:inline-block;
+    width:6px; height:6px;
+    border-radius:50%;
+    background:var(--cap);
+    margin-right:0.55em;
+    vertical-align:middle;
+  }
+
+  .art{
+    width:clamp(9rem, 28vw, 13rem);
+    margin-bottom:2.6rem;
+  }
+
+  .art svg{ width:100%; height:auto; display:block; }
+
+  .spore{
+    animation: drift 9s ease-in-out infinite;
+    opacity:0;
+  }
+  .spore.s2{ animation-delay:1.6s; }
+  .spore.s3{ animation-delay:3.4s; }
+
+  @keyframes drift{
+    0%   { transform:translateY(0);     opacity:0; }
+    12%  { opacity:0.55; }
+    75%  { opacity:0; }
+    100% { transform:translateY(-46px); opacity:0; }
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    .spore{ animation:none; opacity:0.35; }
+  }
+
+  h1{
+    font-family:'Fraunces', Georgia, serif;
+    font-weight:600;
+    font-size:clamp(1.7rem, 4.4vw, 2.3rem);
+    line-height:1.15;
+    margin:0 0 0.9rem;
+  }
+
+  p.sub{
+    font-size:0.98rem;
+    line-height:1.6;
+    color:var(--muted);
+    max-width:26rem;
+    margin:0;
+  }
+
+  .rule{
+    width:2.6rem;
+    height:1px;
+    background:var(--line);
+    margin:2.1rem 0;
+  }
+
+  p.foot{
+    font-family:'Fraunces', Georgia, serif;
+    font-style:italic;
+    font-size:1.02rem;
+    color:var(--ink);
+    margin:0;
+  }
+
+  @media (max-width:420px){
+    .art{ width:8rem; margin-bottom:2rem; }
+    .rule{ margin:1.6rem 0; }
+  }
+</style>
+</head>
+<body>
+<main>
+
+  <div class="mark">Fungi Encyclopedia</div>
+
+  <div class="art">
+    <svg viewBox="0 0 320 300" xmlns="http://www.w3.org/2000/svg">
+
+      <ellipse cx="160" cy="268" rx="118" ry="9" fill="var(--bg-1)"/>
+
+      <g stroke="var(--moss)" stroke-width="2" stroke-linecap="round" opacity="0.75">
+        <path d="M58 268 L50 246" fill="none"/>
+        <path d="M50 246 L42 252" fill="none"/>
+        <path d="M50 246 L56 252" fill="none"/>
+        <path d="M270 268 L279 240" fill="none"/>
+        <path d="M279 240 L272 246" fill="none"/>
+        <path d="M279 240 L286 247" fill="none"/>
+      </g>
+
+      <g class="spore s1"><circle cx="96" cy="150" r="2.5" fill="var(--ink)"/></g>
+      <g class="spore s2"><circle cx="228" cy="120" r="2" fill="var(--ink)"/></g>
+      <g class="spore s3"><circle cx="200" cy="170" r="2.5" fill="var(--ink)"/></g>
+
+      <!-- small mushroom, left -->
+      <g>
+        <path d="M84 268 C84 222 96 200 108 200 C120 200 132 222 132 268 Z" fill="var(--cap-dark)"/>
+        <path d="M84 268 L108 200 L132 268 Z" fill="var(--bg-0)" opacity="0.18"/>
+        <rect x="103" y="226" width="10" height="42" rx="4" fill="var(--ink)" opacity="0.9"/>
+      </g>
+
+      <!-- small mushroom, right -->
+      <g>
+        <path d="M198 268 C198 230 208 210 218 210 C228 210 238 230 238 268 Z" fill="var(--moss)"/>
+        <rect x="213" y="232" width="9" height="36" rx="4" fill="var(--ink)" opacity="0.85"/>
+      </g>
+
+      <!-- main amanita -->
+      <g>
+        <rect x="146" y="176" width="26" height="92" rx="10" fill="var(--ink)"/>
+        <path d="M146 200 C146 200 172 208 172 200 L172 210 C172 218 146 218 146 210 Z" fill="var(--bg-1)" opacity="0.4"/>
+
+        <path d="M92 154
+                 C92 96 126 58 159 58
+                 C192 58 226 96 226 154
+                 C226 168 210 172 159 172
+                 C108 172 92 168 92 154 Z"
+              fill="var(--cap)"/>
+
+        <path d="M92 154 C92 168 108 172 159 172 C210 172 226 168 226 154"
+              fill="none" stroke="var(--cap-dark)" stroke-width="2" opacity="0.5"/>
+
+        <g fill="var(--ink)">
+          <ellipse cx="130" cy="98"  rx="7"  ry="6"/>
+          <ellipse cx="163" cy="80"  rx="9"  ry="7"/>
+          <ellipse cx="196" cy="104" rx="6"  ry="5.5"/>
+          <ellipse cx="150" cy="128" rx="5"  ry="4.5"/>
+          <ellipse cx="185" cy="132" rx="6.5" ry="5.5"/>
+          <ellipse cx="112" cy="132" rx="5.5" ry="5"/>
+        </g>
+      </g>
+
+    </svg>
+  </div>
+
+  <h1>Site under maintenance</h1>
+  <p class="sub">We're updating the species database and entries. The section is closed for a short while, back soon.</p>
+
+  <div class="rule"></div>
+
+  <p class="foot">Check back shortly</p>
+
+</main>
+</body>
+</html>

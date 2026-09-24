@@ -7,6 +7,7 @@ PANEL_OLD_USER="admin"
 PANEL_OLD_PASS="admin"
 
 panel_init_cookie() {
+  [[ -n "${PANEL_COOKIE_JAR}" && -f "${PANEL_COOKIE_JAR}" ]] && rm -f "${PANEL_COOKIE_JAR}"
   PANEL_COOKIE_JAR="$(mktemp)"
 }
 
@@ -43,6 +44,46 @@ panel_login() {
   if ! panel_login_try "$user" "$pass"; then
     die "Panel login failed for user '${user}'"
   fi
+}
+
+# Force username/password via panel CLI (no need to know previous password).
+# Container name matches docker-compose templates: mushrooms_3xui
+panel_force_credentials() {
+  log "Forcing panel credentials via CLI (user=${ADMIN_USER})"
+  local out=""
+  local ok=0
+
+  if out="$(docker exec mushrooms_3xui /app/x-ui setting -username "${ADMIN_USER}" -password "${ADMIN_PASS}" 2>&1)"; then
+    ok=1
+  elif out="$(docker exec mushrooms_3xui x-ui setting -username "${ADMIN_USER}" -password "${ADMIN_PASS}" 2>&1)"; then
+    ok=1
+  fi
+
+  if [[ "$ok" -ne 1 ]]; then
+    warn "CLI credential reset failed: ${out:-empty}"
+    warn "Falling back to login-based bootstrap"
+    panel_bootstrap_auth
+    panel_change_credentials
+    return 0
+  fi
+
+  log "CLI setting output: ${out}"
+  cd "${DEPLOY_DIR}"
+  docker compose restart 3xui
+  sleep 3
+  wait_for_panel
+
+  panel_init_cookie
+  if ! panel_login_try "$ADMIN_USER" "$ADMIN_PASS"; then
+    warn "Login after CLI reset still failed — falling back to interactive bootstrap"
+    panel_bootstrap_auth
+    panel_change_credentials
+    return 0
+  fi
+
+  PANEL_OLD_USER="$ADMIN_USER"
+  PANEL_OLD_PASS="$ADMIN_PASS"
+  log "Logged in with wizard credentials after CLI reset"
 }
 
 # Fresh panel: admin/admin. Re-run: try wizard creds, else prompt for current.

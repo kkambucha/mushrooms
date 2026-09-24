@@ -6,6 +6,9 @@ data/
 generated/
 nginx/nginx.conf
 docker-compose.yml
-site/
+# Only runtime site at repo root — keep templates/site tracked
+/site/
+!templates/site/
+!templates/site/**
 .DS_Store
 *.pem

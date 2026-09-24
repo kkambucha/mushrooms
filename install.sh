@@ -49,8 +49,9 @@ main() {
 
   if [[ -d "${DEPLOY_DIR}/data/db" ]] && [[ -n "$(ls -A "${DEPLOY_DIR}/data/db" 2>/dev/null || true)" ]]; then
     warn "Existing panel database found at ${DEPLOY_DIR}/data/db"
-    prompt "Continue anyway? (may fail if admin password already changed)" "no"
-    [[ "${REPLY,,}" == "yes" || "${REPLY,,}" == "y" ]] || die "Aborted — remove ${DEPLOY_DIR} for a clean install"
+    warn "Admin password will be reset to wizard values via CLI (no need to know the old password)."
+    prompt "Continue anyway?" "yes"
+    [[ "${REPLY,,}" == "yes" || "${REPLY,,}" == "y" ]] || die "Aborted — remove ${DEPLOY_DIR}/data/db for a clean DB"
   fi
 
   prepare_deploy_dir
@@ -82,8 +83,8 @@ main() {
   panel_init_cookie
   trap panel_cleanup_cookie EXIT
 
-  panel_bootstrap_auth
-  panel_change_credentials
+  # Always force wizard credentials via CLI — do not guess admin/admin
+  panel_force_credentials
 
   if [[ "${INSTALL_MODE}" == "full" ]]; then
     panel_configure_subscription
