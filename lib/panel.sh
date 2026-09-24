@@ -19,15 +19,30 @@ panel_login_payload() {
   jq -n --arg u "$1" --arg p "$2" '{username:$u,password:$p}'
 }
 
+# 3x-ui 3.8+: unsafe methods need X-CSRF-Token from GET /csrf-token (same cookie jar).
+# Echoes token on success; returns 1 on failure (does not die).
+panel_fetch_csrf() {
+  local body token
+  [[ -n "${PANEL_COOKIE_JAR}" && -f "${PANEL_COOKIE_JAR}" ]] || return 1
+  body="$(curl -sS -c "${PANEL_COOKIE_JAR}" -b "${PANEL_COOKIE_JAR}" \
+    -H 'Accept: application/json' \
+    "${PANEL_URL}/csrf-token" 2>/dev/null || true)"
+  token="$(echo "$body" | jq -r '.obj // empty' 2>/dev/null || true)"
+  [[ -n "$token" && "$token" != "null" ]] || return 1
+  printf '%s' "$token"
+}
+
 # Returns 0 on success, 1 on failure (does not die)
 panel_login_try() {
   local user="$1"
   local pass="$2"
-  local payload code body
+  local payload code body token
+  token="$(panel_fetch_csrf)" || return 1
   payload="$(panel_login_payload "$user" "$pass")"
   body="$(curl -sS -c "${PANEL_COOKIE_JAR}" -b "${PANEL_COOKIE_JAR}" \
     -H 'Content-Type: application/json' \
     -H 'Accept: application/json' \
+    -H "X-CSRF-Token: ${token}" \
     -d "$payload" \
     -w '\n%{http_code}' \
     "${PANEL_URL}/login" 2>/dev/null || true)"
@@ -116,9 +131,15 @@ panel_api_post() {
   # panel_api_post /panel/api/... json_body
   local path="$1"
   local json="$2"
+  local token
+  token="$(panel_fetch_csrf)" || {
+    echo ''
+    return 1
+  }
   curl -sS -c "${PANEL_COOKIE_JAR}" -b "${PANEL_COOKIE_JAR}" \
     -H 'Content-Type: application/json' \
     -H 'Accept: application/json' \
+    -H "X-CSRF-Token: ${token}" \
     -d "$json" \
     "${PANEL_URL}${path}"
 }
@@ -126,8 +147,14 @@ panel_api_post() {
 panel_api_post_form() {
   local path="$1"
   shift
+  local token
+  token="$(panel_fetch_csrf)" || {
+    echo ''
+    return 1
+  }
   curl -sS -c "${PANEL_COOKIE_JAR}" -b "${PANEL_COOKIE_JAR}" \
     -H 'Accept: application/json' \
+    -H "X-CSRF-Token: ${token}" \
     "$@" \
     "${PANEL_URL}${path}"
 }

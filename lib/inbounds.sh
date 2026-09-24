@@ -65,8 +65,8 @@ _post_inbound_form() {
   streamSettings="$(jq -r '.streamSettings' "$file")"
   sniffing="$(jq -r '.sniffing' "$file")"
 
-  resp="$(curl -sS -c "${PANEL_COOKIE_JAR}" -b "${PANEL_COOKIE_JAR}" \
-    -H 'Accept: application/json' \
+  # Via panel_api_post_form so CSRF (3x-ui 3.8+) is attached automatically
+  resp="$(panel_api_post_form /panel/api/inbounds/add \
     --data-urlencode "up=${up}" \
     --data-urlencode "down=${down}" \
     --data-urlencode "total=${total}" \
@@ -78,8 +78,7 @@ _post_inbound_form() {
     --data-urlencode "protocol=${protocol}" \
     --data-urlencode "settings=${settings}" \
     --data-urlencode "streamSettings=${streamSettings}" \
-    --data-urlencode "sniffing=${sniffing}" \
-    "${PANEL_URL}/panel/api/inbounds/add")"
+    --data-urlencode "sniffing=${sniffing}" 2>/dev/null || true)"
   printf '%s' "$resp"
   echo "$resp" | jq -e '.success == true' >/dev/null 2>&1
 }

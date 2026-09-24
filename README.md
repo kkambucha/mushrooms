@@ -99,6 +99,16 @@ docker compose restart nginx
 
 Installer always resets panel username/password to wizard values via `docker exec … x-ui setting` (no need to know the old password).
 
+**3x-ui 3.8+ CSRF:** panel rejects `POST /login` and API writes without `X-CSRF-Token`. The installer fetches `GET /csrf-token` and sends the header automatically. Manual check:
+
+```bash
+JAR=/tmp/xui.jar
+TOKEN=$(curl -sS -c "$JAR" -b "$JAR" http://127.0.0.1:2053/csrf-token | jq -r .obj)
+curl -sS -c "$JAR" -b "$JAR" -X POST http://127.0.0.1:2053/login \
+  -H 'Content-Type: application/json' -H "X-CSRF-Token: $TOKEN" \
+  -d '{"username":"admin","password":"YOUR_PASS"}'
+```
+
 If you wiped DB and ran `docker compose up` **before** finishing `install.sh`, the panel may have created its own first-boot user. Just re-run install — it will force wizard credentials. Or on the server:
 
 ```bash
