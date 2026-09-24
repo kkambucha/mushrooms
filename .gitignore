@@ -1,0 +1,11 @@
+# Runtime / local secrets (deploy dir may be co-located)
+DEPLOY.txt
+certs/
+certbot/
+data/
+generated/
+nginx/nginx.conf
+docker-compose.yml
+site/
+.DS_Store
+*.pem
