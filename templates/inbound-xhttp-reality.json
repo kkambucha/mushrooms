@@ -1,0 +1,74 @@
+{
+  "up": 0,
+  "down": 0,
+  "total": 0,
+  "remark": "",
+  "enable": true,
+  "expiryTime": 0,
+  "listen": "",
+  "port": 443,
+  "protocol": "vless",
+  "settings": {
+    "clients": [
+      {
+        "id": "",
+        "email": "",
+        "flow": "",
+        "limitIp": 0,
+        "totalGB": 0,
+        "expiryTime": 0,
+        "enable": true,
+        "tgId": 0,
+        "subId": "",
+        "comment": "",
+        "reset": 0
+      }
+    ],
+    "decryption": "none",
+    "encryption": "none"
+  },
+  "streamSettings": {
+    "network": "xhttp",
+    "xhttpSettings": {
+      "path": "/",
+      "host": "",
+      "headers": {},
+      "scMaxBufferedPosts": 30,
+      "scMaxEachPostBytes": "1000000",
+      "noSSEHeader": false,
+      "xPaddingBytes": "100-1000",
+      "mode": "auto"
+    },
+    "security": "reality",
+    "realitySettings": {
+      "show": false,
+      "xver": 0,
+      "target": "127.0.0.1:8443",
+      "serverNames": [],
+      "privateKey": "",
+      "minClientVer": "",
+      "maxClientVer": "",
+      "maxTimediff": 0,
+      "shortIds": [],
+      "mldsa65Seed": "",
+      "settings": {
+        "publicKey": "",
+        "fingerprint": "chrome",
+        "serverName": "",
+        "spiderX": "/",
+        "mldsa65Verify": ""
+      }
+    }
+  },
+  "sniffing": {
+    "enabled": true,
+    "destOverride": ["http", "tls", "quic"],
+    "metadataOnly": false,
+    "routeOnly": false
+  },
+  "allocate": {
+    "strategy": "always",
+    "refresh": 5,
+    "concurrency": 3
+  }
+}

@@ -1,6 +1,21 @@
 #!/usr/bin/env bash
 # Print and save deployment summary
 
+_uri() {
+  jq -rn --arg v "$1" '$v|@uri'
+}
+
+# Manual import link for the main inbound (same parameters the subscription carries)
+VLESS_LINK=""
+compute_vless_link() {
+  VLESS_LINK="vless://${CLIENT_UUID}@${DOMAIN}:443"
+  VLESS_LINK+="?encryption=none&security=reality"
+  VLESS_LINK+="&sni=$(_uri "$DOMAIN")&fp=chrome"
+  VLESS_LINK+="&pbk=${REALITY_PUBLIC_KEY}&sid=${REALITY_SHORT_ID}&spx=$(_uri "/")"
+  VLESS_LINK+="&type=xhttp&path=$(_uri "$XHTTP_PATH")&mode=auto"
+  VLESS_LINK+="#$(_uri "${COUNTRY} XHTTP")"
+}
+
 write_summary() {
   local panel_host out
   panel_host="${DOMAIN:-${PUBLIC_IP:-<server-ip>}}"
@@ -8,9 +23,14 @@ write_summary() {
 
   if [[ "${INSTALL_MODE}" == "full" ]]; then
     compute_subscription_url
+    compute_vless_link
   else
     SUBSCRIPTION_URL="(configure in panel UI)"
   fi
+
+  # Contains panel password and client UUID — restrict before writing
+  : >"$out"
+  chmod 600 "$out"
 
   {
     cat <<EOF
@@ -66,9 +86,26 @@ CLIENT
   UUID:           ${CLIENT_UUID}
   Comment:        ${COMMENT:--}
 
-INBOUNDS
+MAIN INBOUND — VLESS + XHTTP + REALITY (selfsteal)
+  Address:        ${DOMAIN}:443
+  SNI:            ${DOMAIN}
+  XHTTP path:     ${XHTTP_PATH}  (mode auto)
+  Fingerprint:    chrome
+  Flow:           (empty)
+  Public key:     ${REALITY_PUBLIC_KEY}
+  shortIds:       $(jq -r 'join(", ")' <<<"$REALITY_SHORT_IDS_JSON")
+  Private key:    ${REALITY_KEY_SOURCE} — stored in panel DB and ${DEPLOY_DIR}/generated/ (mode 600)
+  Target:         ${REALITY_TARGET} (nginx site; unauthenticated TLS on :443 lands here)
+
+  Manual link (prefer the subscription):
+  ${VLESS_LINK}
+
+RESERVE INBOUNDS (disabled, no clients, ports closed in UFW)
   VLESS TCP TLS:  ${DOMAIN}:${TCP_PORT}  (remark: ${COUNTRY} TCP)
   VLESS WS TLS:   ${DOMAIN}:${WS_PORT}   (remark: ${COUNTRY} WS, path /)
+  Status:         ${RESERVE_STATUS:-unknown}
+  To use:         enable inbound in panel → attach client → ufw allow <port>/tcp
+                  → clients refresh subscription
   Certs:          ${DEPLOY_DIR}/certs/fullchain.pem
                   ${DEPLOY_DIR}/certs/privkey.pem
 

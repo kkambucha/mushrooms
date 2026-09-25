@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
-# Mushrooms — interactive installer for nginx + 3x-ui (VLESS TLS TCP + WS)
+# Mushrooms — interactive installer for nginx + 3x-ui (VLESS XHTTP + Reality selfsteal)
 # Target: Ubuntu 20.04+ (Debian-compatible)
 # Usage: sudo bash install.sh
 #
 # Leave wizard fields empty → MINIMAL: clean 3x-ui panel only.
-# Fill domain+country+path+UUID+subId → FULL: site + inbounds + HTTPS subscription.
+# Fill domain+country+path+UUID+subId → FULL:
+#   :443 Xray VLESS XHTTP + Reality (target: nginx site on 127.0.0.1:8443)
+#   :2096 HTTPS subscription, reserve VLESS TLS TCP/WS inbounds created disabled.
+# Always install on a clean server.
 
 set -euo pipefail
 
@@ -13,6 +16,8 @@ DEPLOY_DIR="${DEPLOY_DIR:-/opt/mushrooms}"
 
 # shellcheck source=lib/common.sh
 source "${REPO_DIR}/lib/common.sh"
+# shellcheck source=lib/reality.sh
+source "${REPO_DIR}/lib/reality.sh"
 # shellcheck source=lib/ask.sh
 source "${REPO_DIR}/lib/ask.sh"
 # shellcheck source=lib/deps.sh
@@ -56,10 +61,15 @@ main() {
 
   prepare_deploy_dir
 
+  # FULL: nginx serves the site only on 127.0.0.1:8443 (Reality target), :443 is Xray.
+  # MINIMAL with a domain: site stays on public :443.
+  local nginx_mode="public"
+  [[ "${INSTALL_MODE}" == "full" ]] && nginx_mode="local"
+
   if [[ "${ENABLE_SITE}" == "true" ]]; then
     if [[ "$CERT_MODE" == "paste" ]]; then
       write_pasted_certs
-      build_nginx_https
+      build_nginx_https "$nginx_mode"
       compose_up
     else
       write_self_signed_placeholder
@@ -67,7 +77,7 @@ main() {
       compose_up
       sleep 2
       issue_letsencrypt
-      build_nginx_https
+      build_nginx_https "$nginx_mode"
       compose_restart_nginx
       install_cert_renew_hook
     fi
@@ -86,9 +96,12 @@ main() {
   # Always force wizard credentials via CLI — do not guess admin/admin
   panel_force_credentials
 
+  panel_set_xray_log_quiet
+
   if [[ "${INSTALL_MODE}" == "full" ]]; then
     panel_configure_subscription
     create_inbounds
+    verify_selfsteal_site
     verify_subscription_https
   else
     log "MINIMAL mode — skipping inbound/subscription API setup (configure in the panel UI)"

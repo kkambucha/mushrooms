@@ -284,3 +284,49 @@ verify_subscription_https() {
   done
   die "Subscription HTTPS check failed for ${SUBSCRIPTION_URL} (last HTTP code: ${code:-none}). Check certs, UFW 2096, and DNS."
 }
+
+# Xray log: access "none", loglevel "warning" (enable verbose logs manually when debugging).
+# Best-effort: the xray template API differs between 3x-ui versions — warn, never die.
+panel_set_xray_log_quiet() {
+  log "Setting Xray log: access=none, loglevel=warning"
+  local resp tpl new_tpl path ok=0
+  for path in /panel/xray/ /panel/api/xray/; do
+    resp="$(panel_api_post "$path" '{}' 2>/dev/null || true)"
+    if echo "$resp" | jq -e '.success == true' >/dev/null 2>&1; then
+      ok=1
+      break
+    fi
+  done
+  if [[ "$ok" -ne 1 ]]; then
+    warn "Cannot read Xray template from panel — set Log manually: Xray settings → Log → access none"
+    return 0
+  fi
+
+  tpl="$(echo "$resp" | jq -c '.obj | (if type == "string" then fromjson else . end) | .xraySetting
+    | (if type == "string" then fromjson else . end)' 2>/dev/null || true)"
+  if [[ -z "$tpl" || "$tpl" == "null" ]]; then
+    warn "Unexpected Xray template format — set Log manually: Xray settings → Log → access none"
+    return 0
+  fi
+
+  new_tpl="$(echo "$tpl" | jq -c '.log = ((.log // {}) + {access: "none", error: "", loglevel: "warning", dnsLog: false})')"
+
+  ok=0
+  for path in /panel/xray/update /panel/api/xray/update; do
+    resp="$(panel_api_post_form "$path" --data-urlencode "xraySetting=${new_tpl}" 2>/dev/null || true)"
+    if echo "$resp" | jq -e '.success == true' >/dev/null 2>&1; then
+      ok=1
+      break
+    fi
+  done
+  if [[ "$ok" -ne 1 ]]; then
+    warn "Cannot save Xray template (${resp:-empty}) — set Log manually: Xray settings → Log → access none"
+    return 0
+  fi
+
+  panel_api_post /panel/api/server/restartXrayService '{}' >/dev/null 2>&1 \
+    || panel_api_post /server/restartXrayService '{}' >/dev/null 2>&1 \
+    || warn "Xray restart request failed — restart Xray in the panel to apply log settings"
+  sleep 2
+  log "Xray log settings saved"
+}

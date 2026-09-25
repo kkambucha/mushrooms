@@ -38,13 +38,27 @@ build_nginx_http_only() {
   render_nginx "$http_root" "$https_block"
 }
 
+# build_nginx_https [local|public]
+#   local  — FULL mode: site only on 127.0.0.1:8443, it is the Reality target;
+#            :443 belongs to Xray (VLESS XHTTP + Reality)
+#   public — site directly on :443 (MINIMAL mode with a domain)
 build_nginx_https() {
+  local mode="${1:-public}"
   local http_root='return 301 https://$host$request_uri;'
+  local listen_lines
+  case "$mode" in
+    local)
+      listen_lines='        listen 127.0.0.1:8443 ssl;'
+      ;;
+    public)
+      listen_lines="$(printf '%s\n%s' '        listen 443 ssl;' '        listen [::]:443 ssl;')"
+      ;;
+    *) die "build_nginx_https: unknown mode '${mode}'" ;;
+  esac
   local https_block
   https_block="$(cat <<EOF
     server {
-        listen 443 ssl;
-        listen [::]:443 ssl;
+${listen_lines}
         http2 on;
         server_name ${DOMAIN};
 
@@ -115,6 +129,16 @@ wait_for_panel() {
     sleep 2
   done
   die "3x-ui panel did not become ready on port 2053"
+}
+
+# Die if anything already listens on TCP port $1 (Xray must bind it)
+ensure_port_free() {
+  local port="$1" line
+  line="$(ss -Htlnp "( sport = :${port} )" 2>/dev/null | head -n1 || true)"
+  if [[ -n "$line" ]]; then
+    die "Port ${port} is already in use: ${line}
+Stop that service (or remove its config) and re-run on a clean server."
+  fi
 }
 
 stop_conflicting_web() {

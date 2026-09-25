@@ -1,7 +1,7 @@
 services:
   3xui:
-    # Pin a release tag in production if you need bit-for-bit reproducibility.
-    image: ghcr.io/mhsanaei/3x-ui:latest
+    # Pinned: inbound JSON / API verified against 3x-ui v3.8.5 (Xray v26.9.9).
+    image: ghcr.io/mhsanaei/3x-ui:v3.8.5
     container_name: mushrooms_3xui
     restart: unless-stopped
     network_mode: host

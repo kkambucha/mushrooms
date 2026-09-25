@@ -1,40 +1,72 @@
 #!/usr/bin/env bash
-# Create VLESS TCP+TLS and WS+TLS inbounds via 3x-ui API
+# Inbounds via 3x-ui API:
+#   main    — VLESS + XHTTP + Reality on :443, target = nginx site on 127.0.0.1:8443
+#   reserve — VLESS TLS TCP / WS, created DISABLED and without clients (ports stay closed in UFW)
 
-render_inbound_templates() {
+REALITY_PORT=443
+REALITY_TARGET="127.0.0.1:8443"
+RESERVE_STATUS=""
+
+# Write stdin to a file readable only by root (inbound JSON may contain the Reality private key)
+_write_private() {
+  local out="$1"
+  (umask 077 && cat >"$out")
+  chmod 600 "$out"
+}
+
+render_inbound_xhttp_reality() {
   mkdir -p "${DEPLOY_DIR}/generated"
-  local comment_esc country_esc domain_esc
-  comment_esc="$(json_escape "$COMMENT")"
+  jq \
+    --arg remark "${COUNTRY} XHTTP" \
+    --arg uuid "$CLIENT_UUID" \
+    --arg email "$COUNTRY" \
+    --arg subid "$SUB_ID" \
+    --arg comment "$COMMENT" \
+    --arg path "$XHTTP_PATH" \
+    --arg domain "$DOMAIN" \
+    --arg target "$REALITY_TARGET" \
+    --arg priv "$REALITY_PRIVATE_KEY" \
+    --arg pub "$REALITY_PUBLIC_KEY" \
+    --argjson port "$REALITY_PORT" \
+    --argjson sids "$REALITY_SHORT_IDS_JSON" '
+    .remark = $remark
+    | .port = $port
+    | .settings.clients[0] |= (.id = $uuid | .email = $email | .subId = $subid | .comment = $comment | .flow = "")
+    | .streamSettings.xhttpSettings.path = $path
+    | .streamSettings.realitySettings |= (
+        .target = $target
+        | .serverNames = [$domain]
+        | .privateKey = $priv
+        | .shortIds = $sids
+        | .settings.publicKey = $pub
+      )
+    | .settings |= tojson
+    | .streamSettings |= tojson
+    | .sniffing |= tojson
+    | .allocate |= tojson
+  ' "${REPO_DIR}/templates/inbound-xhttp-reality.json" \
+    | _write_private "${DEPLOY_DIR}/generated/inbound-xhttp-reality.json"
+}
+
+render_inbound_reserve() {
+  mkdir -p "${DEPLOY_DIR}/generated"
+  local country_esc domain_esc tcp_tpl ws_tpl
   country_esc="$(json_escape "$COUNTRY")"
   domain_esc="$(json_escape "$DOMAIN")"
 
-  local tcp_tpl ws_tpl
   tcp_tpl="$(cat "${REPO_DIR}/templates/inbound-tcp.json.tpl")"
   ws_tpl="$(cat "${REPO_DIR}/templates/inbound-ws.json.tpl")"
 
   tcp_tpl="${tcp_tpl//__DOMAIN__/$domain_esc}"
   tcp_tpl="${tcp_tpl//__COUNTRY__/$country_esc}"
-  tcp_tpl="${tcp_tpl//__CLIENT_UUID__/$CLIENT_UUID}"
-  tcp_tpl="${tcp_tpl//__SUB_ID__/$SUB_ID}"
   tcp_tpl="${tcp_tpl//__TCP_PORT__/$TCP_PORT}"
-  tcp_tpl="${tcp_tpl//__COMMENT__/$comment_esc}"
 
   ws_tpl="${ws_tpl//__DOMAIN__/$domain_esc}"
   ws_tpl="${ws_tpl//__COUNTRY__/$country_esc}"
-  ws_tpl="${ws_tpl//__CLIENT_UUID__/$CLIENT_UUID}"
-  ws_tpl="${ws_tpl//__SUB_ID__/$SUB_ID}"
   ws_tpl="${ws_tpl//__WS_PORT__/$WS_PORT}"
-  ws_tpl="${ws_tpl//__COMMENT__/$comment_esc}"
 
-  echo "$tcp_tpl" | jq . >"${DEPLOY_DIR}/generated/inbound-tcp.json"
-  echo "$ws_tpl" | jq . >"${DEPLOY_DIR}/generated/inbound-ws.json"
-
-  # Compat payload without finalmask/testseed (older 3x-ui / xray builds)
-  jq '
-    .settings |= (fromjson | del(.testseed) | tojson)
-    | .streamSettings |= (fromjson | del(.finalmask) | tojson)
-  ' "${DEPLOY_DIR}/generated/inbound-tcp.json" \
-    >"${DEPLOY_DIR}/generated/inbound-tcp-compat.json"
+  echo "$tcp_tpl" | jq . | _write_private "${DEPLOY_DIR}/generated/inbound-tcp.json"
+  echo "$ws_tpl" | jq . | _write_private "${DEPLOY_DIR}/generated/inbound-ws.json"
 }
 
 # POST inbound; echo response to stdout; return 0 if success
@@ -83,10 +115,11 @@ _post_inbound_form() {
   echo "$resp" | jq -e '.success == true' >/dev/null 2>&1
 }
 
+# add_inbound file label — returns 0 on success, 1 on failure (caller decides)
+ADD_INBOUND_LAST_RESP=""
 add_inbound() {
   local file="$1"
   local label="$2"
-  local compat="${3-}"
   log "Creating inbound: ${label}"
   local payload resp
   payload="$(cat "$file")"
@@ -102,23 +135,45 @@ add_inbound() {
     return 0
   fi
 
-  if [[ -n "$compat" && -f "$compat" ]]; then
-    warn "Retrying ${label} without finalmask/testseed (compat)"
-    if add_inbound "$compat" "${label} (compat)"; then
-      return 0
-    fi
-  fi
-
-  die "Failed to add inbound ${label}: ${resp:-empty}"
+  ADD_INBOUND_LAST_RESP="${resp:-empty}"
+  return 1
 }
 
 create_inbounds() {
-  render_inbound_templates
+  render_inbound_xhttp_reality
+  render_inbound_reserve
+
+  ensure_port_free "$REALITY_PORT"
   add_inbound \
-    "${DEPLOY_DIR}/generated/inbound-tcp.json" \
-    "VLESS TCP TLS :${TCP_PORT}" \
-    "${DEPLOY_DIR}/generated/inbound-tcp-compat.json"
-  add_inbound \
-    "${DEPLOY_DIR}/generated/inbound-ws.json" \
-    "VLESS WS TLS :${WS_PORT}"
+    "${DEPLOY_DIR}/generated/inbound-xhttp-reality.json" \
+    "VLESS XHTTP Reality :${REALITY_PORT} (main)" \
+    || die "Failed to add main inbound: ${ADD_INBOUND_LAST_RESP}"
+
+  # Reserve inbounds: failure is not fatal — main channel already exists
+  local tcp_ok="created" ws_ok="created"
+  add_inbound "${DEPLOY_DIR}/generated/inbound-tcp.json" "VLESS TCP TLS :${TCP_PORT} (reserve, disabled)" \
+    || { warn "Reserve TCP inbound not created: ${ADD_INBOUND_LAST_RESP}"; tcp_ok="NOT created"; }
+  add_inbound "${DEPLOY_DIR}/generated/inbound-ws.json" "VLESS WS TLS :${WS_PORT} (reserve, disabled)" \
+    || { warn "Reserve WS inbound not created: ${ADD_INBOUND_LAST_RESP}"; ws_ok="NOT created"; }
+  RESERVE_STATUS="TCP ${tcp_ok}, WS ${ws_ok}"
+}
+
+# The site must answer through Reality on :443 (unauthenticated TLS is forwarded to nginx)
+verify_selfsteal_site() {
+  log "Verifying site through Reality: https://${DOMAIN}/ via 127.0.0.1:${REALITY_PORT}"
+  local code i
+  for i in $(seq 1 15); do
+    code="$(curl -sS --noproxy '*' -o /dev/null -w '%{http_code}' --connect-timeout 5 \
+      --resolve "${DOMAIN}:${REALITY_PORT}:127.0.0.1" \
+      "https://${DOMAIN}/" 2>/dev/null || true)"
+    if [[ "$code" == "200" ]]; then
+      log "Selfsteal OK: site answers through Reality on :${REALITY_PORT}"
+      return 0
+    fi
+    sleep 2
+  done
+  die "Site is not reachable through Reality on :${REALITY_PORT} (last HTTP code: ${code:-none}). Check:
+  ss -tlnp | grep -E ':(443|8443)\\b'
+  curl -vk --resolve ${DOMAIN}:8443:127.0.0.1 https://${DOMAIN}:8443/
+  docker logs --tail 50 mushrooms_3xui"
 }
