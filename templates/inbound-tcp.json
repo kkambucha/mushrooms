@@ -1,0 +1,79 @@
+{
+  "up": 0,
+  "down": 0,
+  "total": 0,
+  "remark": "",
+  "enable": false,
+  "expiryTime": 0,
+  "listen": "",
+  "port": 0,
+  "protocol": "vless",
+  "settings": {
+    "clients": [
+      {
+        "id": "",
+        "email": "",
+        "flow": "",
+        "limitIp": 0,
+        "totalGB": 0,
+        "expiryTime": 0,
+        "enable": true,
+        "tgId": 0,
+        "subId": "",
+        "comment": "",
+        "reset": 0
+      }
+    ],
+    "decryption": "none",
+    "encryption": "none"
+  },
+  "streamSettings": {
+    "network": "tcp",
+    "tcpSettings": {
+      "acceptProxyProtocol": false
+    },
+    "security": "tls",
+    "tlsSettings": {
+      "serverName": "",
+      "minVersion": "1.2",
+      "maxVersion": "1.3",
+      "cipherSuites": "",
+      "rejectUnknownSni": false,
+      "disableSystemRoot": false,
+      "enableSessionResumption": false,
+      "certificates": [
+        {
+          "ocspStapling": 0,
+          "oneTimeLoading": false,
+          "usage": "encipherment",
+          "buildChain": false,
+          "certificateFile": "/etc/3x-ui/certs/fullchain.pem",
+          "keyFile": "/etc/3x-ui/certs/privkey.pem",
+          "useFile": true
+        }
+      ],
+      "alpn": [
+        "h2",
+        "http/1.1"
+      ],
+      "echServerKeys": "",
+      "settings": {
+        "fingerprint": "chrome",
+        "echConfigList": "",
+        "pinnedPeerCertSha256": [],
+        "verifyPeerCertByName": ""
+      }
+    }
+  },
+  "sniffing": {
+    "enabled": false,
+    "destOverride": [],
+    "metadataOnly": false,
+    "routeOnly": false
+  },
+  "allocate": {
+    "strategy": "always",
+    "refresh": 5,
+    "concurrency": 3
+  }
+}

@@ -3,10 +3,11 @@
 # Target: Ubuntu 20.04+ (Debian-compatible)
 # Usage: sudo bash install.sh
 #
-# Leave wizard fields empty → MINIMAL: clean 3x-ui panel only.
-# Fill domain+country+path+UUID+subId → FULL:
+# No domain → MINIMAL: clean 3x-ui panel only.
+# Domain given → FULL (other fields optional, generated when empty):
 #   :443 Xray VLESS XHTTP + Reality (target: nginx site on 127.0.0.1:8443)
-#   :2096 HTTPS subscription, reserve VLESS TLS TCP/WS inbounds created disabled.
+#   :2096 HTTPS subscription; one client attached to all inbounds;
+#   reserve VLESS TLS TCP/WS inbounds created disabled.
 # Always install on a clean server.
 
 set -euo pipefail
@@ -61,15 +62,11 @@ main() {
 
   prepare_deploy_dir
 
-  # FULL: nginx serves the site only on 127.0.0.1:8443 (Reality target), :443 is Xray.
-  # MINIMAL with a domain: site stays on public :443.
-  local nginx_mode="public"
-  [[ "${INSTALL_MODE}" == "full" ]] && nginx_mode="local"
-
+  # Domain given (FULL): nginx serves the site only on 127.0.0.1:8443 (Reality target), :443 is Xray.
   if [[ "${ENABLE_SITE}" == "true" ]]; then
     if [[ "$CERT_MODE" == "paste" ]]; then
       write_pasted_certs
-      build_nginx_https "$nginx_mode"
+      build_nginx_https
       compose_up
     else
       write_self_signed_placeholder
@@ -77,7 +74,7 @@ main() {
       compose_up
       sleep 2
       issue_letsencrypt
-      build_nginx_https "$nginx_mode"
+      build_nginx_https
       compose_restart_nginx
       install_cert_renew_hook
     fi

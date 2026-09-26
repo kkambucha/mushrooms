@@ -13,8 +13,10 @@ Interactive installer for Ubuntu 20.04+ that deploys **3x-ui** (and optionally n
 
 | Mode | When | What you get |
 |------|------|----------------|
-| **MINIMAL** | Leave wizard fields empty (or omit VPN fields) | Clean 3x-ui on `:2053` — configure inbounds/subscription in the panel UI |
-| **FULL** | Fill domain + country + sub path + UUID + subId | XHTTP+Reality selfsteal on 443 + site + HTTPS subscription + disabled reserve TCP/WS inbounds |
+| **MINIMAL** | No domain | Clean 3x-ui on `:2053` — configure inbounds/subscription in the panel UI |
+| **FULL** | Domain given (everything else optional — generated when empty) | XHTTP+Reality selfsteal on 443 + site + HTTPS subscription + one client attached to all inbounds + disabled reserve TCP/WS |
+
+Minimal FULL install: enter only the domain (and ACME email) — country, subscription path, UUID, subId, XHTTP path, Reality keys, shortIds and reserve ports are generated and written to `DEPLOY.txt`.
 
 ## FULL mode layout
 
@@ -33,10 +35,12 @@ Inbounds created by the installer:
 | Inbound | State | Notes |
 |---------|-------|-------|
 | VLESS XHTTP Reality `:443` | enabled | client from the wizard (UUID, email = country, subId, comment), flow empty, `mode auto`, `xPaddingBytes 100-1000`, fingerprint `chrome`, `xver 0` |
-| VLESS TLS TCP `:<tcp port>` | **disabled**, no clients | reserve; port closed in UFW |
-| VLESS TLS WS `:<ws port>` | **disabled**, no clients | reserve; port closed in UFW |
+| VLESS TLS TCP `:<tcp port>` | **disabled**, same client attached | reserve; port closed in UFW |
+| VLESS TLS WS `:<ws port>` | **disabled**, same client attached | reserve; port closed in UFW |
 
-To use the reserve: enable the inbound in the panel → attach a client → `ufw allow <port>/tcp` → clients refresh the subscription.
+One client (same UUID, email, subId) is attached to all three inbounds. Disabled inbounds are expected to be left out of the subscription — check after install (`curl -s https://DOMAIN:2096/<sub-path>/<subId> | base64 -d` must show only the XHTTP link).
+
+To use the reserve: enable the inbound in the panel → `ufw allow <port>/tcp` → clients refresh the subscription.
 
 Why not TCP+Reality: on 2026-09-25 a correctly configured TCP+Reality selfsteal authenticated clients but traffic stopped after the first response from two Russian networks (Wi-Fi and mobile), two clients and two ports, while XHTTP+Reality with the same target worked. This matches community reports of TSPU filtering in 2026 (e.g. [XTLS/Xray-core#6293](https://github.com/XTLS/Xray-core/issues/6293)); root cause not proven.
 
@@ -153,8 +157,11 @@ Prefer letting `install.sh` finish before manually starting compose after a DB w
 
 | Prompt | Empty Enter |
 |--------|-------------|
-| Domain | OK → no nginx/site |
-| Country, sub path, UUID, subId | OK → MINIMAL; all filled (+ domain) → FULL |
+| Domain | OK → MINIMAL (no nginx/site, no inbounds); filled → FULL |
+| Country (client email / label) | FULL: `client` |
+| Subscription path | FULL: 8 random hex |
+| Client UUID | FULL: random UUID |
+| subId | FULL: 16 random hex |
 | Comment | OK |
 | Reserve TCP / WS ports | Asked only in FULL (random default); inbounds are created disabled |
 | XHTTP path | Asked only in FULL; empty → `/` + 10 random hex |

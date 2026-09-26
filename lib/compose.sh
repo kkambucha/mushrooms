@@ -38,23 +38,11 @@ build_nginx_http_only() {
   render_nginx "$http_root" "$https_block"
 }
 
-# build_nginx_https [local|public]
-#   local  — FULL mode: site only on 127.0.0.1:8443, it is the Reality target;
-#            :443 belongs to Xray (VLESS XHTTP + Reality)
-#   public — site directly on :443 (MINIMAL mode with a domain)
+# build_nginx_https — site only on 127.0.0.1:8443, it is the Reality target;
+# public :443 belongs to Xray (VLESS XHTTP + Reality). Used only when a domain is set (FULL).
 build_nginx_https() {
-  local mode="${1:-public}"
   local http_root='return 301 https://$host$request_uri;'
-  local listen_lines
-  case "$mode" in
-    local)
-      listen_lines='        listen 127.0.0.1:8443 ssl;'
-      ;;
-    public)
-      listen_lines="$(printf '%s\n%s' '        listen 443 ssl;' '        listen [::]:443 ssl;')"
-      ;;
-    *) die "build_nginx_https: unknown mode '${mode}'" ;;
-  esac
+  local listen_lines='        listen 127.0.0.1:8443 ssl;'
   local https_block
   https_block="$(cat <<EOF
     server {

@@ -3,13 +3,12 @@
 
 ask_config() {
   log "Configuration wizard"
-  echo "Leave ALL fields empty for a clean 3x-ui panel only (configure VPN later in the UI)."
+  echo "Domain given → FULL: VLESS XHTTP + Reality selfsteal on :443 + site + HTTPS subscription."
+  echo "  Every other field is optional — empty ones are generated automatically."
+  echo "No domain → MINIMAL: clean 3x-ui panel only (configure VPN later in the UI)."
   echo "Runtime will be created at ${DEPLOY_DIR} after dependencies succeed."
-  echo
-  echo "For FULL auto-setup (VLESS XHTTP + Reality selfsteal on :443 + site + HTTPS subscription), fill:"
-  echo "  domain, country, subscription path, client UUID, subId"
-  echo "  (and certs / ACME email when domain is set)."
-  echo "Migration tip: use the same domain/path/subId/UUID (and Reality private key) as the existing server."
+  echo "Migration tip: enter the existing country/sub path/UUID/subId (and Reality private key)"
+  echo "  to keep current client links working."
   echo
 
   INSTALL_MODE="minimal"
@@ -43,15 +42,15 @@ ask_config() {
     ENABLE_SITE="true"
   fi
 
-  prompt "Country / client email label (optional, needed for FULL)" ""
+  prompt "Country / client email label (optional, default: client)" ""
   COUNTRY="${REPLY}"
 
-  prompt "Subscription path name (optional, needed for FULL)" ""
+  prompt "Subscription path name (optional, auto if empty)" ""
   SUB_PATH="${REPLY}"
   SUB_PATH="${SUB_PATH#/}"
   SUB_PATH="${SUB_PATH%/}"
 
-  prompt "Client UUID (optional, needed for FULL)" ""
+  prompt "Client UUID (optional, auto if empty)" ""
   CLIENT_UUID="${REPLY}"
   if [[ -n "$CLIENT_UUID" ]]; then
     if [[ ! "$CLIENT_UUID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
@@ -59,19 +58,36 @@ ask_config() {
     fi
   fi
 
-  prompt "Subscription ID / subId (optional, needed for FULL)" ""
+  prompt "Subscription ID / subId (optional, auto if empty)" ""
   SUB_ID="${REPLY}"
 
   prompt "Client comment (optional)" ""
   COMMENT="${REPLY}"
 
-  if [[ -n "$DOMAIN" && -n "$COUNTRY" && -n "$SUB_PATH" && -n "$CLIENT_UUID" && -n "$SUB_ID" ]]; then
+  GENERATED_FIELDS=()
+  if [[ -n "$DOMAIN" ]]; then
     INSTALL_MODE="full"
+    if [[ -z "$COUNTRY" ]]; then
+      COUNTRY="client"
+      GENERATED_FIELDS+=("country")
+    fi
+    if [[ -z "$SUB_PATH" ]]; then
+      SUB_PATH="$(rand_hex 8)"
+      GENERATED_FIELDS+=("sub path")
+    fi
+    if [[ -z "$CLIENT_UUID" ]]; then
+      CLIENT_UUID="$(rand_uuid)"
+      GENERATED_FIELDS+=("UUID")
+    fi
+    if [[ -z "$SUB_ID" ]]; then
+      SUB_ID="$(rand_hex 16)"
+      GENERATED_FIELDS+=("subId")
+    fi
   else
     INSTALL_MODE="minimal"
-    if [[ -n "$DOMAIN" || -n "$COUNTRY" || -n "$SUB_PATH" || -n "$CLIENT_UUID" || -n "$SUB_ID" ]]; then
-      warn "Partial VPN fields given — using MINIMAL mode (no auto inbounds/subscription)."
-      warn "For FULL mode fill all of: domain, country, sub path, UUID, subId."
+    if [[ -n "$COUNTRY" || -n "$SUB_PATH" || -n "$CLIENT_UUID" || -n "$SUB_ID" ]]; then
+      warn "No domain — using MINIMAL mode; country/sub path/UUID/subId are ignored."
+      warn "Reality selfsteal needs a domain (site + Let's Encrypt certificate)."
     fi
   fi
 
@@ -84,7 +100,7 @@ ask_config() {
     done
     echo
     echo "Main inbound: VLESS + XHTTP + Reality on :443 (target: site on 127.0.0.1:8443)."
-    echo "Reserve inbounds VLESS TLS TCP/WS are created DISABLED, without clients, ports closed in UFW."
+    echo "Reserve inbounds VLESS TLS TCP/WS: created DISABLED, client attached, ports closed in UFW."
     prompt "Reserve VLESS TCP TLS port (disabled)" "$tcp"
     TCP_PORT="${REPLY}"
     prompt "Reserve VLESS WS TLS port (disabled)" "$ws"
@@ -165,16 +181,17 @@ ask_config() {
   echo "  Public IP:    ${PUBLIC_IP:-unknown}"
   echo "  Site/nginx:   ${ENABLE_SITE}"
   if [[ "$INSTALL_MODE" == "full" ]]; then
-    echo "  Country:      $COUNTRY"
-    echo "  Sub path:     /$SUB_PATH"
-    echo "  UUID:         $CLIENT_UUID"
-    echo "  SubId:        $SUB_ID"
+    _gen() { [[ " ${GENERATED_FIELDS[*]:-} " == *" $1 "* ]] && printf ' (generated)'; true; }
+    echo "  Country:      ${COUNTRY}$(_gen country)"
+    echo "  Sub path:     /${SUB_PATH}$(_gen 'sub path')"
+    echo "  UUID:         ${CLIENT_UUID}$(_gen UUID)"
+    echo "  SubId:        ${SUB_ID}$(_gen subId)"
     echo "  Main inbound: VLESS XHTTP + Reality :443 → target 127.0.0.1:8443"
     echo "  XHTTP path:   $XHTTP_PATH"
     echo "  Reality pbk:  $REALITY_PUBLIC_KEY (private key ${REALITY_KEY_SOURCE})"
     echo "  shortIds:     $(jq -r 'join(", ")' <<<"$REALITY_SHORT_IDS_JSON")"
-    echo "  Reserve TCP:  $TCP_PORT (disabled, no clients, port closed)"
-    echo "  Reserve WS:   $WS_PORT (disabled, no clients, port closed)"
+    echo "  Reserve TCP:  $TCP_PORT (disabled, client attached, port closed)"
+    echo "  Reserve WS:   $WS_PORT (disabled, client attached, port closed)"
   else
     echo "  VPN auto:     skipped — configure inbounds/subscription in the panel UI"
   fi

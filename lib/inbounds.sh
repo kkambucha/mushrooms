@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Inbounds via 3x-ui API:
 #   main    — VLESS + XHTTP + Reality on :443, target = nginx site on 127.0.0.1:8443
-#   reserve — VLESS TLS TCP / WS, created DISABLED and without clients (ports stay closed in UFW)
+#   reserve — VLESS TLS TCP / WS, created DISABLED with the same client attached (ports stay closed in UFW)
 
 REALITY_PORT=443
 REALITY_TARGET="127.0.0.1:8443"
@@ -13,6 +13,11 @@ _write_private() {
   (umask 077 && cat >"$out")
   chmod 600 "$out"
 }
+
+# jq filter: put the wizard client into .settings.clients[0]
+_JQ_CLIENT='.settings.clients[0] |= (.id = $uuid | .email = $email | .subId = $subid | .comment = $comment | .flow = "")'
+# jq filter: 3x-ui API expects these fields as JSON strings
+_JQ_STRINGIFY='.settings |= tojson | .streamSettings |= tojson | .sniffing |= tojson | .allocate |= tojson'
 
 render_inbound_xhttp_reality() {
   mkdir -p "${DEPLOY_DIR}/generated"
@@ -28,45 +33,44 @@ render_inbound_xhttp_reality() {
     --arg priv "$REALITY_PRIVATE_KEY" \
     --arg pub "$REALITY_PUBLIC_KEY" \
     --argjson port "$REALITY_PORT" \
-    --argjson sids "$REALITY_SHORT_IDS_JSON" '
-    .remark = $remark
-    | .port = $port
-    | .settings.clients[0] |= (.id = $uuid | .email = $email | .subId = $subid | .comment = $comment | .flow = "")
-    | .streamSettings.xhttpSettings.path = $path
+    --argjson sids "$REALITY_SHORT_IDS_JSON" "
+    .remark = \$remark
+    | .port = \$port
+    | ${_JQ_CLIENT}
+    | .streamSettings.xhttpSettings.path = \$path
     | .streamSettings.realitySettings |= (
-        .target = $target
-        | .serverNames = [$domain]
-        | .privateKey = $priv
-        | .shortIds = $sids
-        | .settings.publicKey = $pub
+        .target = \$target
+        | .serverNames = [\$domain]
+        | .privateKey = \$priv
+        | .shortIds = \$sids
+        | .settings.publicKey = \$pub
       )
-    | .settings |= tojson
-    | .streamSettings |= tojson
-    | .sniffing |= tojson
-    | .allocate |= tojson
-  ' "${REPO_DIR}/templates/inbound-xhttp-reality.json" \
+    | ${_JQ_STRINGIFY}
+  " "${REPO_DIR}/templates/inbound-xhttp-reality.json" \
     | _write_private "${DEPLOY_DIR}/generated/inbound-xhttp-reality.json"
 }
 
+# Reserve VLESS TLS inbound (tcp|ws): disabled, same client attached, certs from /etc/3x-ui/certs
+# render_inbound_reserve <tcp|ws> <port> <remark suffix>
 render_inbound_reserve() {
+  local kind="$1" port="$2" suffix="$3"
   mkdir -p "${DEPLOY_DIR}/generated"
-  local country_esc domain_esc tcp_tpl ws_tpl
-  country_esc="$(json_escape "$COUNTRY")"
-  domain_esc="$(json_escape "$DOMAIN")"
-
-  tcp_tpl="$(cat "${REPO_DIR}/templates/inbound-tcp.json.tpl")"
-  ws_tpl="$(cat "${REPO_DIR}/templates/inbound-ws.json.tpl")"
-
-  tcp_tpl="${tcp_tpl//__DOMAIN__/$domain_esc}"
-  tcp_tpl="${tcp_tpl//__COUNTRY__/$country_esc}"
-  tcp_tpl="${tcp_tpl//__TCP_PORT__/$TCP_PORT}"
-
-  ws_tpl="${ws_tpl//__DOMAIN__/$domain_esc}"
-  ws_tpl="${ws_tpl//__COUNTRY__/$country_esc}"
-  ws_tpl="${ws_tpl//__WS_PORT__/$WS_PORT}"
-
-  echo "$tcp_tpl" | jq . | _write_private "${DEPLOY_DIR}/generated/inbound-tcp.json"
-  echo "$ws_tpl" | jq . | _write_private "${DEPLOY_DIR}/generated/inbound-ws.json"
+  jq \
+    --arg remark "${COUNTRY} ${suffix}" \
+    --arg uuid "$CLIENT_UUID" \
+    --arg email "$COUNTRY" \
+    --arg subid "$SUB_ID" \
+    --arg comment "$COMMENT" \
+    --arg domain "$DOMAIN" \
+    --argjson port "$port" "
+    .remark = \$remark
+    | .port = \$port
+    | .enable = false
+    | ${_JQ_CLIENT}
+    | .streamSettings.tlsSettings.serverName = \$domain
+    | ${_JQ_STRINGIFY}
+  " "${REPO_DIR}/templates/inbound-${kind}.json" \
+    | _write_private "${DEPLOY_DIR}/generated/inbound-${kind}.json"
 }
 
 # POST inbound; echo response to stdout; return 0 if success
@@ -139,9 +143,31 @@ add_inbound() {
   return 1
 }
 
+# _add_reserve <tcp|ws> <port> <label> — prints status for DEPLOY.txt.
+# If the panel rejects the inbound with the client attached (e.g. duplicate email
+# in some 3x-ui builds), retry without clients so the reserve still exists.
+_add_reserve() {
+  local kind="$1" port="$2" label="$3"
+  local file="${DEPLOY_DIR}/generated/inbound-${kind}.json"
+  local bare="${DEPLOY_DIR}/generated/inbound-${kind}-noclient.json"
+  if add_inbound "$file" "VLESS ${label} TLS :${port} (reserve, disabled)" >&2; then
+    printf 'created, client attached'
+    return 0
+  fi
+  warn "Reserve ${label} with client rejected: ${ADD_INBOUND_LAST_RESP} — retrying without clients"
+  jq '.settings |= (fromjson | .clients = [] | tojson)' "$file" | _write_private "$bare"
+  if add_inbound "$bare" "VLESS ${label} TLS :${port} (reserve, disabled, no client)" >&2; then
+    printf 'created WITHOUT client — attach it in the panel'
+    return 0
+  fi
+  warn "Reserve ${label} inbound not created: ${ADD_INBOUND_LAST_RESP}"
+  printf 'NOT created'
+}
+
 create_inbounds() {
   render_inbound_xhttp_reality
-  render_inbound_reserve
+  render_inbound_reserve tcp "$TCP_PORT" TCP
+  render_inbound_reserve ws "$WS_PORT" WS
 
   ensure_port_free "$REALITY_PORT"
   add_inbound \
@@ -150,11 +176,9 @@ create_inbounds() {
     || die "Failed to add main inbound: ${ADD_INBOUND_LAST_RESP}"
 
   # Reserve inbounds: failure is not fatal — main channel already exists
-  local tcp_ok="created" ws_ok="created"
-  add_inbound "${DEPLOY_DIR}/generated/inbound-tcp.json" "VLESS TCP TLS :${TCP_PORT} (reserve, disabled)" \
-    || { warn "Reserve TCP inbound not created: ${ADD_INBOUND_LAST_RESP}"; tcp_ok="NOT created"; }
-  add_inbound "${DEPLOY_DIR}/generated/inbound-ws.json" "VLESS WS TLS :${WS_PORT} (reserve, disabled)" \
-    || { warn "Reserve WS inbound not created: ${ADD_INBOUND_LAST_RESP}"; ws_ok="NOT created"; }
+  local tcp_ok ws_ok
+  tcp_ok="$(_add_reserve tcp "$TCP_PORT" TCP)"
+  ws_ok="$(_add_reserve ws "$WS_PORT" WS)"
   RESERVE_STATUS="TCP ${tcp_ok}, WS ${ws_ok}"
 }
 

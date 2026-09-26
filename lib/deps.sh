@@ -59,7 +59,7 @@ configure_ufw() {
   if [[ "${INSTALL_MODE:-minimal}" == "full" ]]; then
     ufw allow 2096/tcp >/dev/null 2>&1 || true
     # Reserve TCP/WS inbounds are created disabled — their ports stay closed.
-    # To use the reserve: enable inbound in panel, attach a client, `ufw allow <port>/tcp`.
+    # To use the reserve: enable inbound in panel (client is already attached), `ufw allow <port>/tcp`.
   fi
 
   if ufw status | grep -qi inactive; then

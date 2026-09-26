@@ -21,6 +21,12 @@ write_summary() {
   panel_host="${DOMAIN:-${PUBLIC_IP:-<server-ip>}}"
   out="${DEPLOY_DIR}/DEPLOY.txt"
 
+  local generated_list="none (all entered in wizard)"
+  if (( ${#GENERATED_FIELDS[@]} > 0 )); then
+    generated_list="$(printf '%s, ' "${GENERATED_FIELDS[@]}")"
+    generated_list="${generated_list%, }"
+  fi
+
   if [[ "${INSTALL_MODE}" == "full" ]]; then
     compute_subscription_url
     compute_vless_link
@@ -81,10 +87,11 @@ SUBSCRIPTION
   SubId:          ${SUB_ID}
   Sub port:       2096
 
-CLIENT
+CLIENT (attached to all inbounds)
   Email/label:    ${COUNTRY}
   UUID:           ${CLIENT_UUID}
   Comment:        ${COMMENT:--}
+  Generated:      ${generated_list}
 
 MAIN INBOUND — VLESS + XHTTP + REALITY (selfsteal)
   Address:        ${DOMAIN}:443
@@ -100,11 +107,11 @@ MAIN INBOUND — VLESS + XHTTP + REALITY (selfsteal)
   Manual link (prefer the subscription):
   ${VLESS_LINK}
 
-RESERVE INBOUNDS (disabled, no clients, ports closed in UFW)
+RESERVE INBOUNDS (disabled, same client attached, ports closed in UFW)
   VLESS TCP TLS:  ${DOMAIN}:${TCP_PORT}  (remark: ${COUNTRY} TCP)
   VLESS WS TLS:   ${DOMAIN}:${WS_PORT}   (remark: ${COUNTRY} WS, path /)
   Status:         ${RESERVE_STATUS:-unknown}
-  To use:         enable inbound in panel → attach client → ufw allow <port>/tcp
+  To use:         enable inbound in panel → ufw allow <port>/tcp
                   → clients refresh subscription
   Certs:          ${DEPLOY_DIR}/certs/fullchain.pem
                   ${DEPLOY_DIR}/certs/privkey.pem

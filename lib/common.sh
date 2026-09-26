@@ -22,6 +22,20 @@ rand_alnum() {
   printf '%s' "${s:0:${n}}"
 }
 
+rand_uuid() {
+  local u=""
+  if [[ -r /proc/sys/kernel/random/uuid ]]; then
+    u="$(cat /proc/sys/kernel/random/uuid)"
+  fi
+  if [[ ! "$u" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]; then
+    # RFC 4122 v4 from openssl random bytes
+    local h
+    h="$(openssl rand -hex 16)"
+    u="${h:0:8}-${h:8:4}-4${h:13:3}-$(printf '%x' $(( (0x${h:16:1} & 0x3) | 0x8 )))${h:17:3}-${h:20:12}"
+  fi
+  printf '%s' "$u"
+}
+
 rand_port() {
   # 20000-50000
   echo $((20000 + RANDOM % 30001))
