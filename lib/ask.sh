@@ -40,6 +40,9 @@ ask_config() {
     DOMAIN="${DOMAIN#http://}"
     DOMAIN="${DOMAIN%%/*}"
     ENABLE_SITE="true"
+    prompt "Email for Let's Encrypt / certificate" "example@gmail.com"
+    ACME_EMAIL="${REPLY}"
+    [[ -n "$ACME_EMAIL" ]] || ACME_EMAIL="example@gmail.com"
   fi
 
   prompt "Country / client email label (optional, default: client)" ""
@@ -165,11 +168,8 @@ ask_config() {
       [[ -n "${REPLY}" ]] || die "Private key required when fullchain is provided"
       PRIVKEY_PEM="${REPLY}"
       CERT_MODE="paste"
-    else
-      prompt "Email for Let's Encrypt" ""
-      ACME_EMAIL="${REPLY}"
-      [[ -n "$ACME_EMAIL" ]] || die "ACME email required when certificates are not pasted"
     fi
+    # ACME_EMAIL already set as second wizard step when domain was given
   fi
 
   PUBLIC_IP="$(detect_public_ip)"
@@ -197,6 +197,9 @@ ask_config() {
   fi
   echo "  Panel user:   $ADMIN_USER"
   echo "  Cert mode:    $CERT_MODE"
+  if [[ "$ENABLE_SITE" == "true" ]]; then
+    echo "  ACME email:   ${ACME_EMAIL}"
+  fi
   echo
   prompt "Proceed with installation?" "yes"
   [[ "${REPLY,,}" == "yes" || "${REPLY,,}" == "y" ]] || die "Aborted by user"
