@@ -16,7 +16,7 @@ sudo systemctl enable --now docker
 docker compose version   # команда должна сработать до установки
 
 # 3) установка
-git clone <YOUR_REPO_URL> /opt/mushrooms-src
+git clone https://github.com/kkambucha/mushrooms.git /opt/mushrooms-src
 cd /opt/mushrooms-src
 sudo bash install.sh
 # откроется визард: можно всё прокликать Enter — будет только панель;
