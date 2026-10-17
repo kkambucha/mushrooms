@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Inbounds via 3x-ui API:
 #   main    — VLESS + XHTTP + Reality on :443, target = nginx site on 127.0.0.1:8443
-#   reserve — VLESS TLS TCP / WS, created DISABLED with the same client attached (ports stay closed in UFW)
+#   reserve — VLESS TLS TCP / WS, created DISABLED with the same client attached (UFW opened at install)
 
 REALITY_PORT=443
 REALITY_TARGET="127.0.0.1:8443"

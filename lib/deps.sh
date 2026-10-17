@@ -48,22 +48,34 @@ install_deps() {
 
 configure_ufw() {
   log "Configuring UFW"
+  local opened="22 2053"
+
   ufw allow OpenSSH >/dev/null 2>&1 || ufw allow 22/tcp >/dev/null 2>&1 || true
   ufw allow 2053/tcp >/dev/null 2>&1 || true
 
   if [[ "${ENABLE_SITE:-false}" == "true" ]]; then
     ufw allow 80/tcp >/dev/null 2>&1 || true
     ufw allow 443/tcp >/dev/null 2>&1 || true
+    opened="${opened} 80 443"
   fi
 
   if [[ "${INSTALL_MODE:-minimal}" == "full" ]]; then
     ufw allow 2096/tcp >/dev/null 2>&1 || true
-    # Reserve TCP/WS inbounds are created disabled — their ports stay closed.
-    # To use the reserve: enable inbound in panel (client is already attached), `ufw allow <port>/tcp`.
+    opened="${opened} 2096"
+    # Reserve inbounds stay disabled in the panel, but open UFW so enabling them later works.
+    if [[ -n "${TCP_PORT:-}" && "${TCP_PORT}" =~ ^[0-9]+$ ]]; then
+      ufw allow "${TCP_PORT}/tcp" >/dev/null 2>&1 || true
+      opened="${opened} ${TCP_PORT}"
+    fi
+    if [[ -n "${WS_PORT:-}" && "${WS_PORT}" =~ ^[0-9]+$ ]]; then
+      ufw allow "${WS_PORT}/tcp" >/dev/null 2>&1 || true
+      opened="${opened} ${WS_PORT}"
+    fi
   fi
 
   if ufw status | grep -qi inactive; then
     echo "y" | ufw enable || true
   fi
   ufw reload || true
+  log "UFW allow: ${opened}/tcp"
 }

@@ -103,7 +103,7 @@ ask_config() {
     done
     echo
     echo "Main inbound: VLESS + XHTTP + Reality on :443 (target: site on 127.0.0.1:8443)."
-    echo "Reserve inbounds VLESS TLS TCP/WS: created DISABLED, client attached, ports closed in UFW."
+    echo "Reserve inbounds VLESS TLS TCP/WS: created DISABLED in panel, client attached, UFW ports open."
     prompt "Reserve VLESS TCP TLS port (disabled)" "$tcp"
     TCP_PORT="${REPLY}"
     prompt "Reserve VLESS WS TLS port (disabled)" "$ws"
@@ -190,8 +190,8 @@ ask_config() {
     echo "  XHTTP path:   $XHTTP_PATH"
     echo "  Reality pbk:  $REALITY_PUBLIC_KEY (private key ${REALITY_KEY_SOURCE})"
     echo "  shortIds:     $(jq -r 'join(", ")' <<<"$REALITY_SHORT_IDS_JSON")"
-    echo "  Reserve TCP:  $TCP_PORT (disabled, client attached, port closed)"
-    echo "  Reserve WS:   $WS_PORT (disabled, client attached, port closed)"
+    echo "  Reserve TCP:  $TCP_PORT (disabled in panel, UFW open)"
+    echo "  Reserve WS:   $WS_PORT (disabled in panel, UFW open)"
   else
     echo "  VPN auto:     skipped — configure inbounds/subscription in the panel UI"
   fi
