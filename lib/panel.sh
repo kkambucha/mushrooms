@@ -224,7 +224,8 @@ panel_configure_subscription() {
     --arg uri "https://${DOMAIN}:2096/${SUB_PATH}/" \
     --arg domain "${DOMAIN}" \
     --arg cert "/etc/3x-ui/certs/fullchain.pem" \
-    --arg key "/etc/3x-ui/certs/privkey.pem" '
+    --arg key "/etc/3x-ui/certs/privkey.pem" \
+    --arg remark_tpl '{{INBOUND}}|📊{{TRAFFIC_LEFT}}|⏳{{DAYS_LEFT}}D' '
     .obj
     | .subEnable = true
     | .subListen = "0.0.0.0"
@@ -235,6 +236,7 @@ panel_configure_subscription() {
     | .subCertFile = $cert
     | .subKeyFile = $key
     | .subUpdates = 12
+    | .remarkTemplate = $remark_tpl
   ')"
 
   local resp

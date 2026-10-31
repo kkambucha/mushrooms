@@ -8,12 +8,13 @@ _uri() {
 # Manual import link for the main inbound (same parameters the subscription carries)
 VLESS_LINK=""
 compute_vless_link() {
+  country_flag_from_label
   VLESS_LINK="vless://${CLIENT_UUID}@${DOMAIN}:443"
   VLESS_LINK+="?encryption=none&security=reality"
   VLESS_LINK+="&sni=$(_uri "$DOMAIN")&fp=chrome"
   VLESS_LINK+="&pbk=${REALITY_PUBLIC_KEY}&sid=${REALITY_SHORT_ID}&spx=$(_uri "/")"
   VLESS_LINK+="&type=xhttp&path=$(_uri "$XHTTP_PATH")&mode=auto"
-  VLESS_LINK+="#$(_uri "${COUNTRY} XHTTP")"
+  VLESS_LINK+="#$(_uri "$(inbound_remark XHTTP)")"
 }
 
 write_summary() {
@@ -108,8 +109,8 @@ MAIN INBOUND — VLESS + XHTTP + REALITY (selfsteal)
   ${VLESS_LINK}
 
 RESERVE INBOUNDS (disabled in panel, same client attached, UFW ports open)
-  VLESS TCP TLS:  ${DOMAIN}:${TCP_PORT}  (remark: ${COUNTRY} TCP)
-  VLESS WS TLS:   ${DOMAIN}:${WS_PORT}   (remark: ${COUNTRY} WS, path /)
+  VLESS TCP TLS:  ${DOMAIN}:${TCP_PORT}  (remark: $(inbound_remark TCP))
+  VLESS WS TLS:   ${DOMAIN}:${WS_PORT}   (remark: $(inbound_remark WS), path /)
   Status:         ${RESERVE_STATUS:-unknown}
   To use:         enable inbound in the panel (UFW already allows the ports)
                   → clients refresh subscription

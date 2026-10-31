@@ -6,6 +6,27 @@
 REALITY_PORT=443
 REALITY_TARGET="127.0.0.1:8443"
 RESERVE_STATUS=""
+COUNTRY_FLAG=""
+
+# Sets COUNTRY_FLAG (emoji or empty) from COUNTRY prefix (case-insensitive)
+country_flag_from_label() {
+  local c="${COUNTRY,,}"
+  COUNTRY_FLAG=""
+  case "$c" in
+    netherlands*|nederland*) COUNTRY_FLAG="🇳🇱" ;;
+    germany*|deutschland*) COUNTRY_FLAG="🇩🇪" ;;
+  esac
+}
+
+# inbound_remark XHTTP|TCP|WS -> "🇳🇱 XHTTP" or "XHTTP"
+inbound_remark() {
+  local kind="$1"
+  if [[ -n "${COUNTRY_FLAG}" ]]; then
+    printf '%s %s' "$COUNTRY_FLAG" "$kind"
+  else
+    printf '%s' "$kind"
+  fi
+}
 
 # Write stdin to a file readable only by root (inbound JSON may contain the Reality private key)
 _write_private() {
@@ -22,7 +43,7 @@ _JQ_STRINGIFY='.settings |= tojson | .streamSettings |= tojson | .sniffing |= to
 render_inbound_xhttp_reality() {
   mkdir -p "${DEPLOY_DIR}/generated"
   jq \
-    --arg remark "${COUNTRY} XHTTP" \
+    --arg remark "$(inbound_remark XHTTP)" \
     --arg uuid "$CLIENT_UUID" \
     --arg email "$COUNTRY" \
     --arg subid "$SUB_ID" \
@@ -56,7 +77,7 @@ render_inbound_reserve() {
   local kind="$1" port="$2" suffix="$3"
   mkdir -p "${DEPLOY_DIR}/generated"
   jq \
-    --arg remark "${COUNTRY} ${suffix}" \
+    --arg remark "$(inbound_remark "$suffix")" \
     --arg uuid "$CLIENT_UUID" \
     --arg email "$COUNTRY" \
     --arg subid "$SUB_ID" \
@@ -165,6 +186,7 @@ _add_reserve() {
 }
 
 create_inbounds() {
+  country_flag_from_label
   render_inbound_xhttp_reality
   render_inbound_reserve tcp "$TCP_PORT" TCP
   render_inbound_reserve ws "$WS_PORT" WS
