@@ -12,7 +12,9 @@ sudo apt update && sudo apt install -y git ca-certificates curl && \
   curl -fsSL https://get.docker.com | sudo sh && \
   sudo systemctl enable --now docker && \
   docker compose version && \
-  sudo git clone https://github.com/kkambucha/mushrooms.git /opt/mushrooms-src
+  sudo git clone https://github.com/kkambucha/mushrooms.git /opt/mushrooms-src && \
+  echo "OK: зависимости, Docker и клон готовы — можно запускать install.sh" || \
+  echo "ERROR: что-то оборвалось на шаге 1 — смотри вывод выше, исправь и повтори"
 
 # 2) установка
 cd /opt/mushrooms-src && sudo bash install.sh
