@@ -3,12 +3,10 @@
 
 ask_config() {
   log "Configuration wizard"
-  echo "Domain given → FULL: VLESS XHTTP + Reality selfsteal on :443 + site + HTTPS subscription."
-  echo "  Every other field is optional — empty ones are generated automatically."
-  echo "No domain → MINIMAL: clean 3x-ui panel only (configure VPN later in the UI)."
+  echo "Domain given → FULL: VLESS XHTTP + Reality on :443 + site + HTTPS subscription."
+  echo "  Optional: country, sub path, UUID, subId (for migration). Everything else is generated."
+  echo "No domain → MINIMAL: clean 3x-ui panel only."
   echo "Runtime will be created at ${DEPLOY_DIR} after dependencies succeed."
-  echo "Migration tip: enter the existing country/sub path/UUID/subId (and Reality private key)"
-  echo "  to keep current client links working."
   echo
 
   INSTALL_MODE="minimal"
@@ -40,9 +38,7 @@ ask_config() {
     DOMAIN="${DOMAIN#http://}"
     DOMAIN="${DOMAIN%%/*}"
     ENABLE_SITE="true"
-    prompt "Email for Let's Encrypt / certificate" "example@gmail.com"
-    ACME_EMAIL="${REPLY}"
-    [[ -n "$ACME_EMAIL" ]] || ACME_EMAIL="example@gmail.com"
+    ACME_EMAIL="example@gmail.com"
   fi
 
   prompt "Country / client email label (optional, default: client)" ""
@@ -63,9 +59,6 @@ ask_config() {
 
   prompt "Subscription ID / subId (optional, auto if empty)" ""
   SUB_ID="${REPLY}"
-
-  prompt "Client comment (optional)" ""
-  COMMENT="${REPLY}"
 
   GENERATED_FIELDS=()
   if [[ -n "$DOMAIN" ]]; then
@@ -101,76 +94,29 @@ ask_config() {
     while [[ "$ws" -eq "$tcp" ]]; do
       ws="$(rand_port)"
     done
-    echo
-    echo "Main inbound: VLESS + XHTTP + Reality on :443 (target: site on 127.0.0.1:8443)."
-    echo "Reserve inbounds VLESS TLS TCP/WS: created DISABLED in panel, client attached, UFW ports open."
-    prompt "Reserve VLESS TCP TLS port (disabled)" "$tcp"
-    TCP_PORT="${REPLY}"
-    prompt "Reserve VLESS WS TLS port (disabled)" "$ws"
-    WS_PORT="${REPLY}"
-    local p
-    for p in "$TCP_PORT" "$WS_PORT"; do
-      [[ "$p" =~ ^[0-9]+$ ]] && (( p >= 1 && p <= 65535 )) || die "Invalid port: ${p}"
-      case "$p" in
-        80|443|2053|2096|8443) die "Port ${p} is reserved (80, 443, 2053, 2096, 8443)" ;;
-      esac
-    done
-    [[ "$TCP_PORT" != "$WS_PORT" ]] || die "TCP and WS ports must differ"
+    TCP_PORT="$tcp"
+    WS_PORT="$ws"
+    GENERATED_FIELDS+=("TCP port" "WS port")
 
-    local def_path
-    def_path="/$(rand_hex 10)"
-    prompt "XHTTP path" "$def_path"
-    XHTTP_PATH="${REPLY}"
-    [[ "$XHTTP_PATH" == /* ]] || XHTTP_PATH="/${XHTTP_PATH}"
+    XHTTP_PATH="/$(rand_hex 10)"
+    GENERATED_FIELDS+=("XHTTP path")
     reality_validate_path "$XHTTP_PATH" || die "XHTTP path may contain only A-Z a-z 0-9 . _ ~ / -"
 
-    echo "Reality private key: paste an existing one (migration) or leave empty to generate."
-    prompt_secret "Reality private key (optional)" ""
-    if [[ -n "${REPLY}" ]]; then
-      REALITY_PRIVATE_KEY="${REPLY//[[:space:]]/}"
-      reality_validate_private "$REALITY_PRIVATE_KEY" \
-        || die "Reality private key must be 43 base64url chars (32 bytes)"
-      reality_derive_public "$REALITY_PRIVATE_KEY"
-      REALITY_KEY_SOURCE="pasted"
-    else
-      reality_generate_keypair
-      REALITY_KEY_SOURCE="generated"
-    fi
+    reality_generate_keypair
+    REALITY_KEY_SOURCE="generated"
+    GENERATED_FIELDS+=("Reality keys")
 
-    prompt "Reality shortIds, comma-separated (optional)" ""
-    if [[ -n "${REPLY}" ]]; then
-      reality_parse_short_ids "${REPLY}"
-    else
-      reality_generate_short_ids
-    fi
-  fi
-
-  local gen_user gen_pass
-  gen_user="admin_$(rand_alnum 6)"
-  gen_pass="$(rand_password)"
-  prompt "Panel admin username" "$gen_user"
-  ADMIN_USER="${REPLY}"
-  prompt_secret "Panel admin password" "$gen_pass"
-  ADMIN_PASS="${REPLY}"
-
-  if [[ "$ENABLE_SITE" == "true" ]]; then
-    echo
-    echo "TLS certificates for ${DOMAIN}"
-    echo "  - Paste fullchain + privkey (type END after each), OR"
-    echo "  - Leave empty to issue via Let's Encrypt (certbot)"
-    echo
+    reality_generate_short_ids
+    GENERATED_FIELDS+=("shortIds")
 
     CERT_MODE="certbot"
-    prompt_multiline_pem "Fullchain certificate (fullchain.pem)" "END CERTIFICATE"
-    if [[ -n "${REPLY}" ]]; then
-      FULLCHAIN_PEM="${REPLY}"
-      prompt_multiline_pem "Private key (privkey.pem)" "END PRIVATE KEY"
-      [[ -n "${REPLY}" ]] || die "Private key required when fullchain is provided"
-      PRIVKEY_PEM="${REPLY}"
-      CERT_MODE="paste"
-    fi
-    # ACME_EMAIL already set as second wizard step when domain was given
   fi
+
+  ADMIN_USER="admin"
+  local gen_pass
+  gen_pass="$(rand_password)"
+  prompt_secret "Panel admin password" "$gen_pass"
+  ADMIN_PASS="${REPLY}"
 
   PUBLIC_IP="$(detect_public_ip)"
   echo
@@ -191,15 +137,13 @@ ask_config() {
     echo "  Reality pbk:  $REALITY_PUBLIC_KEY (private key ${REALITY_KEY_SOURCE})"
     echo "  shortIds:     $(jq -r 'join(", ")' <<<"$REALITY_SHORT_IDS_JSON")"
     echo "  Reserve TCP:  $TCP_PORT (disabled in panel, UFW open)"
-    echo "  Reserve WS:   $WS_PORT (disabled in panel, UFW open)"
+    echo "  Reserve WS:   $WS_PORT (enabled in panel, UFW open)"
+    echo "  ACME email:   ${ACME_EMAIL}"
   else
     echo "  VPN auto:     skipped — configure inbounds/subscription in the panel UI"
   fi
   echo "  Panel user:   $ADMIN_USER"
   echo "  Cert mode:    $CERT_MODE"
-  if [[ "$ENABLE_SITE" == "true" ]]; then
-    echo "  ACME email:   ${ACME_EMAIL}"
-  fi
   echo
   prompt "Proceed with installation?" "yes"
   [[ "${REPLY,,}" == "yes" || "${REPLY,,}" == "y" ]] || die "Aborted by user"

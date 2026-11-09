@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Inbounds via 3x-ui API:
 #   main    — VLESS + XHTTP + Reality on :443, target = nginx site on 127.0.0.1:8443
-#   reserve — VLESS TLS TCP / WS, created DISABLED with the same client attached (UFW opened at install)
+#   reserve — VLESS TLS TCP (disabled) / WS (enabled), same client attached (UFW opened at install)
 
 REALITY_PORT=443
 REALITY_TARGET="127.0.0.1:8443"
@@ -71,10 +71,12 @@ render_inbound_xhttp_reality() {
     | _write_private "${DEPLOY_DIR}/generated/inbound-xhttp-reality.json"
 }
 
-# Reserve VLESS TLS inbound (tcp|ws): disabled, same client attached, certs from /etc/3x-ui/certs
+# Reserve VLESS TLS inbound (tcp|ws): TCP disabled, WS enabled; same client; certs from /etc/3x-ui/certs
 # render_inbound_reserve <tcp|ws> <port> <remark suffix>
 render_inbound_reserve() {
   local kind="$1" port="$2" suffix="$3"
+  local enable_json="false"
+  [[ "$kind" == "ws" ]] && enable_json="true"
   mkdir -p "${DEPLOY_DIR}/generated"
   jq \
     --arg remark "$(inbound_remark "$suffix")" \
@@ -83,10 +85,11 @@ render_inbound_reserve() {
     --arg subid "$SUB_ID" \
     --arg comment "$COMMENT" \
     --arg domain "$DOMAIN" \
-    --argjson port "$port" "
+    --argjson port "$port" \
+    --argjson enable "$enable_json" "
     .remark = \$remark
     | .port = \$port
-    | .enable = false
+    | .enable = \$enable
     | ${_JQ_CLIENT}
     | .streamSettings.tlsSettings.serverName = \$domain
     | ${_JQ_STRINGIFY}
@@ -171,13 +174,15 @@ _add_reserve() {
   local kind="$1" port="$2" label="$3"
   local file="${DEPLOY_DIR}/generated/inbound-${kind}.json"
   local bare="${DEPLOY_DIR}/generated/inbound-${kind}-noclient.json"
-  if add_inbound "$file" "VLESS ${label} TLS :${port} (reserve, disabled)" >&2; then
-    printf 'created, client attached'
+  local state="disabled"
+  [[ "$kind" == "ws" ]] && state="enabled"
+  if add_inbound "$file" "VLESS ${label} TLS :${port} (reserve, ${state})" >&2; then
+    printf 'created, client attached (%s)' "$state"
     return 0
   fi
   warn "Reserve ${label} with client rejected: ${ADD_INBOUND_LAST_RESP} — retrying without clients"
   jq '.settings |= (fromjson | .clients = [] | tojson)' "$file" | _write_private "$bare"
-  if add_inbound "$bare" "VLESS ${label} TLS :${port} (reserve, disabled, no client)" >&2; then
+  if add_inbound "$bare" "VLESS ${label} TLS :${port} (reserve, ${state}, no client)" >&2; then
     printf 'created WITHOUT client — attach it in the panel'
     return 0
   fi

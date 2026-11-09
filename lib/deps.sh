@@ -62,7 +62,7 @@ configure_ufw() {
   if [[ "${INSTALL_MODE:-minimal}" == "full" ]]; then
     ufw allow 2096/tcp >/dev/null 2>&1 || true
     opened="${opened} 2096"
-    # Reserve inbounds stay disabled in the panel, but open UFW so enabling them later works.
+    # Reserve TCP stays disabled; WS is enabled — open UFW for both so TCP can be turned on later.
     if [[ -n "${TCP_PORT:-}" && "${TCP_PORT}" =~ ^[0-9]+$ ]]; then
       ufw allow "${TCP_PORT}/tcp" >/dev/null 2>&1 || true
       opened="${opened} ${TCP_PORT}"

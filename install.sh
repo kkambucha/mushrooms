@@ -7,7 +7,7 @@
 # Domain given → FULL (other fields optional, generated when empty):
 #   :443 Xray VLESS XHTTP + Reality (target: nginx site on 127.0.0.1:8443)
 #   :2096 HTTPS subscription; one client attached to all inbounds;
-#   reserve VLESS TLS TCP/WS inbounds created disabled.
+#   reserve VLESS TLS TCP (disabled) + WS (enabled).
 # Always install on a clean server.
 
 set -euo pipefail

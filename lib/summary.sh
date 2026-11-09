@@ -108,11 +108,11 @@ MAIN INBOUND — VLESS + XHTTP + REALITY (selfsteal)
   Manual link (prefer the subscription):
   ${VLESS_LINK}
 
-RESERVE INBOUNDS (disabled in panel, same client attached, UFW ports open)
-  VLESS TCP TLS:  ${DOMAIN}:${TCP_PORT}  (remark: $(inbound_remark TCP))
-  VLESS WS TLS:   ${DOMAIN}:${WS_PORT}   (remark: $(inbound_remark WS), path /)
+RESERVE INBOUNDS (same client attached, UFW ports open)
+  VLESS TCP TLS:  ${DOMAIN}:${TCP_PORT}  (remark: $(inbound_remark TCP), disabled)
+  VLESS WS TLS:   ${DOMAIN}:${WS_PORT}   (remark: $(inbound_remark WS), enabled, path /)
   Status:         ${RESERVE_STATUS:-unknown}
-  To use:         enable inbound in the panel (UFW already allows the ports)
+  TCP reserve:    enable in the panel when needed (UFW already allows the port)
                   → clients refresh subscription
   Certs:          ${DEPLOY_DIR}/certs/fullchain.pem
                   ${DEPLOY_DIR}/certs/privkey.pem
