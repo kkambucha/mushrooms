@@ -18,9 +18,14 @@ sudo apt update && sudo apt install -y git ca-certificates curl && \
 
 # 2) установка
 cd /opt/mushrooms-src && sudo bash install.sh
-# визард: домен (для сайта/VPN), при миграции — страна/path/UUID/subId, пароль панели;
-# остальное сгенерируется само. Дождись Done. → /opt/mushrooms/DEPLOY.txt
+# одна строка настроек:
+#   domain [country] [path] [uuid] [subId] [password]
+# Enter без домена → только панель; только домен → сайт/VPN, остальное само.
+# миграция: kb1.example.com Germany mypath uuid-here subidhere MyPass
+# дождись Done. → /opt/mushrooms/DEPLOY.txt
 ```
+
+Пошаговый визард (если нужен): `USE_STEP_WIZARD=1 sudo bash install.sh`.
 
 ## Проверка
 
@@ -38,6 +43,6 @@ cd /opt/mushrooms && docker compose ps
 
 ## Достаточно домена
 
-Обычно хватает **одного доменного имени**. Path, UUID, subId, ключи Reality, порты и т.д. **сгенерируются сами** и попадут в `DEPLOY.txt`.
+Обычно хватает **одного доменного имени** в строке Config. Path, UUID, subId, ключи Reality, порты и т.д. **сгенерируются сами** и попадут в `DEPLOY.txt`.
 
-В визарде можно задать свои path/UUID/subId/страну (миграция клиента). Reality-ключ через визард больше не спрашивается — при переносе ключей правь панель после установки. Для обычной установки **достаточно указать домен**.
+В той же строке можно задать свои path/UUID/subId/страну/пароль (миграция). Reality-ключ через установщик не спрашивается — при переносе ключей правь панель после установки.

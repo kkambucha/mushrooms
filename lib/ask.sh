@@ -1,14 +1,8 @@
 #!/usr/bin/env bash
-# Interactive wizard — populates CONFIG_* / shared env vars
+# Interactive config — default: one line; step wizard: USE_STEP_WIZARD=1
 
-ask_config() {
-  log "Configuration wizard"
-  echo "Domain given → FULL: VLESS XHTTP + Reality on :443 + site + HTTPS subscription."
-  echo "  Optional: country, sub path, UUID, subId (for migration). Everything else is generated."
-  echo "No domain → MINIMAL: clean 3x-ui panel only."
-  echo "Runtime will be created at ${DEPLOY_DIR} after dependencies succeed."
-  echo
-
+# Reset shared config vars to empty defaults
+_ask_init_vars() {
   INSTALL_MODE="minimal"
   ENABLE_SITE="false"
   DOMAIN=""
@@ -29,9 +23,13 @@ ask_config() {
   FULLCHAIN_PEM=""
   PRIVKEY_PEM=""
   ACME_EMAIL=""
+  ADMIN_USER="admin"
+  ADMIN_PASS=""
+  GENERATED_FIELDS=()
+}
 
-  prompt "Domain name (optional)" ""
-  DOMAIN="${REPLY}"
+# Normalize DOMAIN string; set ENABLE_SITE + ACME if non-empty
+_ask_normalize_domain() {
   if [[ -n "$DOMAIN" ]]; then
     DOMAIN="${DOMAIN,,}"
     DOMAIN="${DOMAIN#https://}"
@@ -40,27 +38,10 @@ ask_config() {
     ENABLE_SITE="true"
     ACME_EMAIL="example@gmail.com"
   fi
+}
 
-  prompt "Country / client email label (optional, default: client)" ""
-  COUNTRY="${REPLY}"
-
-  prompt "Subscription path name (optional, auto if empty)" ""
-  SUB_PATH="${REPLY}"
-  SUB_PATH="${SUB_PATH#/}"
-  SUB_PATH="${SUB_PATH%/}"
-
-  prompt "Client UUID (optional, auto if empty)" ""
-  CLIENT_UUID="${REPLY}"
-  if [[ -n "$CLIENT_UUID" ]]; then
-    if [[ ! "$CLIENT_UUID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
-      die "Client UUID must look like xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-    fi
-  fi
-
-  prompt "Subscription ID / subId (optional, auto if empty)" ""
-  SUB_ID="${REPLY}"
-
-  GENERATED_FIELDS=()
+# After DOMAIN/COUNTRY/SUB_PATH/CLIENT_UUID/SUB_ID are set: modes + auto-fill + Reality/ports
+_ask_apply_domain_mode() {
   if [[ -n "$DOMAIN" ]]; then
     INSTALL_MODE="full"
     if [[ -z "$COUNTRY" ]]; then
@@ -88,36 +69,51 @@ ask_config() {
   fi
 
   if [[ "$INSTALL_MODE" == "full" ]]; then
-    local tcp ws
-    tcp="$(rand_port)"
-    ws="$(rand_port)"
-    while [[ "$ws" -eq "$tcp" ]]; do
-      ws="$(rand_port)"
-    done
-    TCP_PORT="$tcp"
-    WS_PORT="$ws"
-    GENERATED_FIELDS+=("TCP port" "WS port")
-
-    XHTTP_PATH="/$(rand_hex 10)"
-    GENERATED_FIELDS+=("XHTTP path")
-    reality_validate_path "$XHTTP_PATH" || die "XHTTP path may contain only A-Z a-z 0-9 . _ ~ / -"
-
-    reality_generate_keypair
-    REALITY_KEY_SOURCE="generated"
-    GENERATED_FIELDS+=("Reality keys")
-
-    reality_generate_short_ids
-    GENERATED_FIELDS+=("shortIds")
-
-    CERT_MODE="certbot"
+    _ask_finish_full_defaults
   fi
+}
 
-  ADMIN_USER="admin"
-  local gen_pass
-  gen_pass="$(rand_password)"
-  prompt_secret "Panel admin password" "$gen_pass"
-  ADMIN_PASS="${REPLY}"
+_ask_finish_full_defaults() {
+  local tcp ws
+  tcp="$(rand_port)"
+  ws="$(rand_port)"
+  while [[ "$ws" -eq "$tcp" ]]; do
+    ws="$(rand_port)"
+  done
+  TCP_PORT="$tcp"
+  WS_PORT="$ws"
+  GENERATED_FIELDS+=("TCP port" "WS port")
 
+  XHTTP_PATH="/$(rand_hex 10)"
+  GENERATED_FIELDS+=("XHTTP path")
+  reality_validate_path "$XHTTP_PATH" || die "XHTTP path may contain only A-Z a-z 0-9 . _ ~ / -"
+
+  reality_generate_keypair
+  REALITY_KEY_SOURCE="generated"
+  GENERATED_FIELDS+=("Reality keys")
+
+  reality_generate_short_ids
+  GENERATED_FIELDS+=("shortIds")
+
+  CERT_MODE="certbot"
+}
+
+_ask_validate_uuid_if_set() {
+  if [[ -n "$CLIENT_UUID" ]]; then
+    if [[ ! "$CLIENT_UUID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
+      die "Client UUID must look like xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+    fi
+  fi
+}
+
+_ask_ensure_admin_password() {
+  if [[ -z "$ADMIN_PASS" ]]; then
+    ADMIN_PASS="$(rand_password)"
+    GENERATED_FIELDS+=("panel password")
+  fi
+}
+
+_ask_summary_and_proceed() {
   PUBLIC_IP="$(detect_public_ip)"
   echo
   log "Summary of choices"
@@ -143,6 +139,11 @@ ask_config() {
     echo "  VPN auto:     skipped — configure inbounds/subscription in the panel UI"
   fi
   echo "  Panel user:   $ADMIN_USER"
+  if [[ " ${GENERATED_FIELDS[*]:-} " == *" panel password "* ]]; then
+    echo "  Panel pass:   (generated — see DEPLOY.txt)"
+  else
+    echo "  Panel pass:   (provided — see DEPLOY.txt)"
+  fi
   echo "  Cert mode:    $CERT_MODE"
   echo
   prompt "Proceed with installation?" "yes"
@@ -154,5 +155,86 @@ ask_config() {
     if [[ -n "$resolved" && "$resolved" != "$PUBLIC_IP" ]]; then
       warn "DNS for $DOMAIN resolves to $resolved, this host is $PUBLIC_IP — certbot may fail"
     fi
+  fi
+}
+
+# Default: one line — domain [country] [path] [uuid] [subId] [password]
+ask_config_oneline() {
+  log "Configuration (one line)"
+  echo "Format: domain [country] [path] [uuid] [subId] [password]"
+  echo "  Empty line → MINIMAL (panel only). Domain only → FULL, rest generated."
+  echo "  Migration example: kb1.example.com Germany mypath uuid-here subidhere MyPass"
+  echo "Runtime will be created at ${DEPLOY_DIR} after dependencies succeed."
+  echo
+
+  _ask_init_vars
+
+  local line=""
+  read -r -p "Config: " line || true
+  # shellcheck disable=SC2086
+  set -- $line
+
+  DOMAIN="${1-}"
+  COUNTRY="${2-}"
+  SUB_PATH="${3-}"
+  CLIENT_UUID="${4-}"
+  SUB_ID="${5-}"
+  ADMIN_PASS="${6-}"
+
+  SUB_PATH="${SUB_PATH#/}"
+  SUB_PATH="${SUB_PATH%/}"
+
+  _ask_normalize_domain
+  _ask_validate_uuid_if_set
+  _ask_apply_domain_mode
+  _ask_ensure_admin_password
+  _ask_summary_and_proceed
+}
+
+# Step-by-step wizard (hidden). Enable: USE_STEP_WIZARD=1 sudo bash install.sh
+ask_config_wizard() {
+  log "Configuration wizard (step-by-step)"
+  echo "Domain given → FULL: VLESS XHTTP + Reality on :443 + site + HTTPS subscription."
+  echo "  Optional: country, sub path, UUID, subId (for migration). Everything else is generated."
+  echo "No domain → MINIMAL: clean 3x-ui panel only."
+  echo "Runtime will be created at ${DEPLOY_DIR} after dependencies succeed."
+  echo
+
+  _ask_init_vars
+
+  prompt "Domain name (optional)" ""
+  DOMAIN="${REPLY}"
+  _ask_normalize_domain
+
+  prompt "Country / client email label (optional, default: client)" ""
+  COUNTRY="${REPLY}"
+
+  prompt "Subscription path name (optional, auto if empty)" ""
+  SUB_PATH="${REPLY}"
+  SUB_PATH="${SUB_PATH#/}"
+  SUB_PATH="${SUB_PATH%/}"
+
+  prompt "Client UUID (optional, auto if empty)" ""
+  CLIENT_UUID="${REPLY}"
+  _ask_validate_uuid_if_set
+
+  prompt "Subscription ID / subId (optional, auto if empty)" ""
+  SUB_ID="${REPLY}"
+
+  _ask_apply_domain_mode
+
+  local gen_pass
+  gen_pass="$(rand_password)"
+  prompt_secret "Panel admin password" "$gen_pass"
+  ADMIN_PASS="${REPLY}"
+
+  _ask_summary_and_proceed
+}
+
+ask_config() {
+  if [[ "${USE_STEP_WIZARD:-0}" == "1" ]]; then
+    ask_config_wizard
+  else
+    ask_config_oneline
   fi
 }
