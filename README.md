@@ -19,7 +19,7 @@ sudo apt update && sudo apt install -y git ca-certificates curl && \
 - Enter — только панель.
 - Вписать домен — сайт и VPN; path, UUID и остальное сгенерируются сами.
 - Перенос старого клиента: после домена через пробел — страна, path, UUID, subId, пароль. Что не указать — сгенерируется.
-- Логин панели всегда `admin`. Пароль — в конце строки Config или сгенерируется (смотри `DEPLOY.txt`).
+- Пароль панели — в конце строки Config или сгенерируется (смотри `DEPLOY.txt`).
 - Дождись `Done.`
 
 Пошаговый опрос вместо одной строки: `cd /opt/mushrooms-src && USE_STEP_WIZARD=1 sudo bash install.sh`.
@@ -32,7 +32,7 @@ cd /opt/mushrooms && docker compose ps
 ```
 
 - Нет `/opt/mushrooms` или нет `DEPLOY.txt` — установка не дошла до конца; смотри вывод, поправь и повтори команду.
-- Панель: `http://IP:2053/` (только http; из‑за HSTS на домене лучше IP или инкогнито). Логин: `admin`, пароль — в `DEPLOY.txt`.
+- Панель: `http://IP:2053/` (только http; из‑за HSTS на домене лучше IP или инкогнито). Пароль — в `DEPLOY.txt`.
 - Ссылка на подписку — в `DEPLOY.txt`.
 
 ## Достаточно домена
