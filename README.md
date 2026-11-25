@@ -14,6 +14,8 @@ sudo apt update && sudo apt install -y git ca-certificates curl && \
   cd /opt/mushrooms-src && sudo bash install.sh
 ```
 
+Сначала переключатель сертификата: стрелки меняют вариант, Enter подтверждает, по умолчанию новый. Имеющийся — вставка fullchain, затем privkey, каждый блок завершается строкой `END`.
+
 Дальше скрипт спросит **Config**:
 
 - Enter — только панель.

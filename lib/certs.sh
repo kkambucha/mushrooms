@@ -8,6 +8,10 @@ write_pasted_certs() {
   printf '%s' "$PRIVKEY_PEM" >"${DEPLOY_DIR}/certs/privkey.pem"
   chmod 644 "${DEPLOY_DIR}/certs/fullchain.pem"
   chmod 600 "${DEPLOY_DIR}/certs/privkey.pem"
+  openssl x509 -in "${DEPLOY_DIR}/certs/fullchain.pem" -noout >/dev/null \
+    || die "Pasted fullchain.pem is not a valid certificate"
+  openssl pkey -in "${DEPLOY_DIR}/certs/privkey.pem" -noout >/dev/null \
+    || die "Pasted privkey.pem is not a valid private key"
 }
 
 write_self_signed_placeholder() {

@@ -62,6 +62,12 @@ _ask_apply_domain_mode() {
     fi
   else
     INSTALL_MODE="minimal"
+    if [[ "$CERT_MODE" == "paste" ]]; then
+      warn "No domain — pasted certificate is ignored."
+      CERT_MODE="none"
+      FULLCHAIN_PEM=""
+      PRIVKEY_PEM=""
+    fi
     if [[ -n "$COUNTRY" || -n "$SUB_PATH" || -n "$CLIENT_UUID" || -n "$SUB_ID" ]]; then
       warn "No domain — using MINIMAL mode; country/sub path/UUID/subId are ignored."
       warn "Reality selfsteal needs a domain (site + Let's Encrypt certificate)."
@@ -95,7 +101,9 @@ _ask_finish_full_defaults() {
   reality_generate_short_ids
   GENERATED_FIELDS+=("shortIds")
 
-  CERT_MODE="certbot"
+  if [[ "$CERT_MODE" != "paste" ]]; then
+    CERT_MODE="certbot"
+  fi
 }
 
 _ask_validate_uuid_if_set() {
@@ -149,12 +157,45 @@ _ask_summary_and_proceed() {
   prompt "Proceed with installation?" "yes"
   [[ "${REPLY,,}" == "yes" || "${REPLY,,}" == "y" ]] || die "Aborted by user"
 
-  if [[ "$ENABLE_SITE" == "true" ]] && command -v getent >/dev/null 2>&1 && [[ -n "$PUBLIC_IP" ]]; then
+  if [[ "$ENABLE_SITE" == "true" && "$CERT_MODE" == "certbot" ]] && command -v getent >/dev/null 2>&1 && [[ -n "$PUBLIC_IP" ]]; then
     local resolved
     resolved="$(getent ahostsv4 "$DOMAIN" 2>/dev/null | awk '{print $1; exit}' || true)"
     if [[ -n "$resolved" && "$resolved" != "$PUBLIC_IP" ]]; then
       warn "DNS for $DOMAIN resolves to $resolved, this host is $PUBLIC_IP — certbot may fail"
     fi
+  fi
+}
+
+# Left/right moves the brackets, Enter confirms. Default is New.
+_ask_cert_toggle() {
+  local choice=0 key rest
+  if [[ ! -t 0 ]]; then
+    die "Certificate choice needs a terminal"
+  fi
+  while true; do
+    if [[ "$choice" -eq 0 ]]; then
+      printf '\r%-40s' "Certificate  [New]  Existing"
+    else
+      printf '\r%-40s' "Certificate   New  [Existing]"
+    fi
+    if ! IFS= read -rsn1 key; then
+      printf '\n'
+      die "Certificate choice needs a terminal"
+    fi
+    if [[ "$key" == $'\x1b' ]]; then
+      IFS= read -rsn2 rest || true
+      case "$rest" in
+        '[C'|'[D') choice=$((1 - choice)) ;;
+      esac
+    elif [[ -z "$key" ]]; then
+      break
+    fi
+  done
+  printf '\n'
+  if [[ "$choice" -eq 0 ]]; then
+    CERT_MODE="none"
+  else
+    CERT_MODE="paste"
   fi
 }
 
@@ -168,6 +209,15 @@ ask_config_oneline() {
   echo
 
   _ask_init_vars
+  _ask_cert_toggle
+  if [[ "$CERT_MODE" == "paste" ]]; then
+    prompt_multiline_pem "Certificate (fullchain.pem)"
+    FULLCHAIN_PEM="$REPLY"
+    [[ -n "${FULLCHAIN_PEM//[[:space:]]/}" ]] || die "Certificate is empty"
+    prompt_multiline_pem "Private key (privkey.pem)"
+    PRIVKEY_PEM="$REPLY"
+    [[ -n "${PRIVKEY_PEM//[[:space:]]/}" ]] || die "Private key is empty"
+  fi
 
   local line=""
   read -r -p "Config: " line || true

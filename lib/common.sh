@@ -72,25 +72,17 @@ prompt_secret() {
 }
 
 prompt_multiline_pem() {
-  # Reads until a line containing only END marker or empty line after BEGIN
+  # Reads until a line that is exactly END. That line is not kept.
+  # A blank first line does not cancel the paste.
   local label="$1"
-  local end_marker="$2"
   echo "$label"
-  echo "(paste PEM, then a line with only 'END' when finished; leave empty first line to skip)"
-  local line first=1 buf=""
+  echo "(paste PEM, then a line with only END)"
+  local line buf=""
   while IFS= read -r line; do
-    if [[ "$first" -eq 1 && -z "$line" ]]; then
-      REPLY=""
-      return 0
-    fi
-    first=0
     if [[ "$line" == "END" ]]; then
       break
     fi
     buf+="$line"$'\n'
-    if [[ "$line" == *"$end_marker"* ]]; then
-      break
-    fi
   done
   REPLY="$buf"
 }

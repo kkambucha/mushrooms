@@ -65,6 +65,7 @@ main() {
   # Domain given (FULL): nginx serves the site only on 127.0.0.1:8443 (Reality target), :443 is Xray.
   if [[ "${ENABLE_SITE}" == "true" ]]; then
     if [[ "$CERT_MODE" == "paste" ]]; then
+      remove_cert_renew_hook
       write_pasted_certs
       build_nginx_https
       compose_up
