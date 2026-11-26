@@ -71,22 +71,6 @@ prompt_secret() {
   fi
 }
 
-prompt_multiline_pem() {
-  # Reads until a line that is exactly END. That line is not kept.
-  # A blank first line does not cancel the paste.
-  local label="$1"
-  echo "$label"
-  echo "(paste PEM, then a line with only END)"
-  local line buf=""
-  while IFS= read -r line; do
-    if [[ "$line" == "END" ]]; then
-      break
-    fi
-    buf+="$line"$'\n'
-  done
-  REPLY="$buf"
-}
-
 json_escape() {
   # Escape string for JSON embedding
   local s="$1"

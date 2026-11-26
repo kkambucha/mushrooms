@@ -166,37 +166,64 @@ _ask_summary_and_proceed() {
   fi
 }
 
-# Left/right moves the brackets, Enter confirms. Default is New.
-_ask_cert_toggle() {
-  local choice=0 key rest
-  if [[ ! -t 0 ]]; then
-    die "Certificate choice needs a terminal"
-  fi
-  while true; do
-    if [[ "$choice" -eq 0 ]]; then
-      printf '\r%-40s' "Certificate  [New]  Existing"
-    else
-      printf '\r%-40s' "Certificate   New  [Existing]"
-    fi
-    if ! IFS= read -rsn1 key; then
-      printf '\n'
-      die "Certificate choice needs a terminal"
-    fi
-    if [[ "$key" == $'\x1b' ]]; then
-      IFS= read -rsn2 rest || true
-      case "$rest" in
-        '[C'|'[D') choice=$((1 - choice)) ;;
-      esac
-    elif [[ -z "$key" ]]; then
+# If a certificate paste is already buffered after the Config line, take it.
+# Does not wait: an empty buffer means issue a new certificate.
+# read -t 0 reports bytes already queued on the terminal (bash 4+ / FIONREAD).
+_ask_take_pasted_certs() {
+  local line="" chain="" key="" saw_key=0 key_done=0
+
+  while read -t 0; do
+    IFS= read -r line || die "Certificate paste ended early"
+    line="${line%$'\r'}"
+    if [[ -n "$line" ]]; then
       break
     fi
   done
-  printf '\n'
-  if [[ "$choice" -eq 0 ]]; then
-    CERT_MODE="none"
-  else
-    CERT_MODE="paste"
+
+  if [[ -z "$line" ]]; then
+    return 0
   fi
+  if [[ "$line" != "-----BEGIN CERTIFICATE-----" ]]; then
+    die "Unexpected text after Config"
+  fi
+
+  chain="$line"$'\n'
+  while read -t 0; do
+    IFS= read -r line || die "Private key is missing"
+    line="${line%$'\r'}"
+    if [[ "$line" == "-----BEGIN PRIVATE KEY-----" || "$line" == "-----BEGIN RSA PRIVATE KEY-----" || "$line" == "-----BEGIN EC PRIVATE KEY-----" ]]; then
+      saw_key=1
+      break
+    fi
+    if [[ -z "$line" ]]; then
+      continue
+    fi
+    chain+="$line"$'\n'
+  done
+  if [[ "$saw_key" -ne 1 ]]; then
+    die "Private key is missing"
+  fi
+
+  key="$line"$'\n'
+  while read -t 0; do
+    IFS= read -r line || die "Private key is missing"
+    line="${line%$'\r'}"
+    if [[ -z "$line" ]]; then
+      continue
+    fi
+    key+="$line"$'\n'
+    if [[ "$line" == "-----END PRIVATE KEY-----" || "$line" == "-----END RSA PRIVATE KEY-----" || "$line" == "-----END EC PRIVATE KEY-----" ]]; then
+      key_done=1
+      break
+    fi
+  done
+  if [[ "$key_done" -ne 1 ]]; then
+    die "Private key is missing"
+  fi
+
+  FULLCHAIN_PEM="$chain"
+  PRIVKEY_PEM="$key"
+  CERT_MODE="paste"
 }
 
 # Default: one line — domain [country] [path] [uuid] [subId] [password]
@@ -204,23 +231,17 @@ ask_config_oneline() {
   log "Configuration (one line)"
   echo "Format: domain [country] [path] [uuid] [subId] [password]"
   echo "  Empty line → MINIMAL (panel only). Domain only → FULL, rest generated."
+  echo "  After that line, paste fullchain.pem and privkey.pem to reuse them."
+  echo "  Omit both to issue a new certificate."
   echo "  Migration example: kb1.example.com Germany mypath uuid-here subidhere MyPass"
   echo "Runtime will be created at ${DEPLOY_DIR} after dependencies succeed."
   echo
 
   _ask_init_vars
-  _ask_cert_toggle
-  if [[ "$CERT_MODE" == "paste" ]]; then
-    prompt_multiline_pem "Certificate (fullchain.pem)"
-    FULLCHAIN_PEM="$REPLY"
-    [[ -n "${FULLCHAIN_PEM//[[:space:]]/}" ]] || die "Certificate is empty"
-    prompt_multiline_pem "Private key (privkey.pem)"
-    PRIVKEY_PEM="$REPLY"
-    [[ -n "${PRIVKEY_PEM//[[:space:]]/}" ]] || die "Private key is empty"
-  fi
 
   local line=""
   read -r -p "Config: " line || true
+  _ask_take_pasted_certs
   # shellcheck disable=SC2086
   set -- $line
 
