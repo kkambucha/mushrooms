@@ -166,15 +166,39 @@ _ask_summary_and_proceed() {
   fi
 }
 
-# Next line after Config. Empty line means no pasted certificate.
-# Waits up to 1s so a paste that arrives just after the Config line is not lost.
+# Strip CR, a leading BOM, bracketed-paste markers, and surrounding whitespace.
+_ask_normalize_paste_line() {
+  line="${line%$'\r'}"
+  line="${line#$'\xef\xbb\xbf'}"
+  line="${line//$'\e[200~'/}"
+  line="${line//$'\e[201~'/}"
+  line="${line#"${line%%[![:space:]]*}"}"
+  line="${line%"${line##*[![:space:]]}"}"
+}
+
+# Read one paste line into `line`. Optional $1 is a timeout in seconds.
+# No timeout waits until the next line or EOF.
 _ask_read_paste_line() {
   line=""
-  if ! IFS= read -r -t 1 line; then
+  if [[ -n "${1-}" ]]; then
+    if ! IFS= read -r -t "$1" line; then
+      line=""
+      return 1
+    fi
+  elif ! IFS= read -r line; then
     line=""
     return 1
   fi
-  line="${line%$'\r'}"
+  _ask_normalize_paste_line
+  return 0
+}
+
+# Drop lines already sitting in the buffer so the outer shell does not run them.
+_ask_drain_paste() {
+  local junk=""
+  while IFS= read -r -t 0.2 junk; do
+    :
+  done
   return 0
 }
 
@@ -182,7 +206,7 @@ _ask_read_paste_line() {
 _ask_take_pasted_certs() {
   local line="" chain="" key="" saw_key=0 key_done=0
 
-  while _ask_read_paste_line; do
+  while _ask_read_paste_line 3; do
     if [[ -n "$line" ]]; then
       break
     fi
@@ -191,13 +215,14 @@ _ask_take_pasted_certs() {
   if [[ -z "$line" ]]; then
     return 0
   fi
-  if [[ "$line" != "-----BEGIN CERTIFICATE-----" ]]; then
+  if [[ "$line" != *"-----BEGIN CERTIFICATE-----"* ]]; then
+    _ask_drain_paste
     die "Unexpected text after Config"
   fi
 
   chain="$line"$'\n'
   while _ask_read_paste_line; do
-    if [[ "$line" == "-----BEGIN PRIVATE KEY-----" || "$line" == "-----BEGIN RSA PRIVATE KEY-----" || "$line" == "-----BEGIN EC PRIVATE KEY-----" ]]; then
+    if [[ "$line" == *"-----BEGIN PRIVATE KEY-----"* || "$line" == *"-----BEGIN RSA PRIVATE KEY-----"* || "$line" == *"-----BEGIN EC PRIVATE KEY-----"* ]]; then
       saw_key=1
       break
     fi
@@ -207,6 +232,7 @@ _ask_take_pasted_certs() {
     chain+="$line"$'\n'
   done
   if [[ "$saw_key" -ne 1 ]]; then
+    _ask_drain_paste
     die "Private key is missing"
   fi
 
@@ -216,12 +242,13 @@ _ask_take_pasted_certs() {
       continue
     fi
     key+="$line"$'\n'
-    if [[ "$line" == "-----END PRIVATE KEY-----" || "$line" == "-----END RSA PRIVATE KEY-----" || "$line" == "-----END EC PRIVATE KEY-----" ]]; then
+    if [[ "$line" == *"-----END PRIVATE KEY-----"* || "$line" == *"-----END RSA PRIVATE KEY-----"* || "$line" == *"-----END EC PRIVATE KEY-----"* ]]; then
       key_done=1
       break
     fi
   done
   if [[ "$key_done" -ne 1 ]]; then
+    _ask_drain_paste
     die "Private key is missing"
   fi
 
