@@ -8,17 +8,23 @@ write_pasted_certs() {
   printf '%s' "$PRIVKEY_PEM" >"${DEPLOY_DIR}/certs/privkey.pem"
   chmod 644 "${DEPLOY_DIR}/certs/fullchain.pem"
   chmod 600 "${DEPLOY_DIR}/certs/privkey.pem"
-  # openssl x509 rejects a whole chain on OpenSSL 3; check one PEM block at a time.
-  local block="" line="" count=0
+  # openssl x509 rejects a whole chain on OpenSSL 3, and also rejects a PEM on stdin.
+  # Check one block at a time from a real file.
+  local block="" line="" count=0 tmp=""
+  tmp="$(mktemp)"
   while IFS= read -r line || [[ -n "$line" ]]; do
     block+="$line"$'\n'
     if [[ "$line" == *"-----END CERTIFICATE-----"* ]]; then
-      printf '%s' "$block" | openssl x509 -noout >/dev/null \
-        || die "Pasted fullchain.pem is not a valid certificate"
+      printf '%s' "$block" >"$tmp"
+      if ! openssl x509 -in "$tmp" -noout >/dev/null; then
+        rm -f "$tmp"
+        die "Pasted fullchain.pem is not a valid certificate"
+      fi
       block=""
       count=$((count + 1))
     fi
   done <"${DEPLOY_DIR}/certs/fullchain.pem"
+  rm -f "$tmp"
   [[ "$count" -ge 1 ]] || die "Pasted fullchain.pem is not a valid certificate"
   openssl pkey -in "${DEPLOY_DIR}/certs/privkey.pem" -noout >/dev/null \
     || die "Pasted privkey.pem is not a valid private key"
