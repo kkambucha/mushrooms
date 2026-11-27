@@ -166,15 +166,23 @@ _ask_summary_and_proceed() {
   fi
 }
 
-# If a certificate paste is already buffered after the Config line, take it.
-# Does not wait: an empty buffer means issue a new certificate.
-# read -t 0 reports bytes already queued on the terminal (bash 4+ / FIONREAD).
+# Next line after Config. Empty line means no pasted certificate.
+# Waits up to 1s so a paste that arrives just after the Config line is not lost.
+_ask_read_paste_line() {
+  line=""
+  if ! IFS= read -r -t 1 line; then
+    line=""
+    return 1
+  fi
+  line="${line%$'\r'}"
+  return 0
+}
+
+# If a certificate follows the Config line, take it. Otherwise leave CERT_MODE alone.
 _ask_take_pasted_certs() {
   local line="" chain="" key="" saw_key=0 key_done=0
 
-  while read -t 0; do
-    IFS= read -r line || die "Certificate paste ended early"
-    line="${line%$'\r'}"
+  while _ask_read_paste_line; do
     if [[ -n "$line" ]]; then
       break
     fi
@@ -188,9 +196,7 @@ _ask_take_pasted_certs() {
   fi
 
   chain="$line"$'\n'
-  while read -t 0; do
-    IFS= read -r line || die "Private key is missing"
-    line="${line%$'\r'}"
+  while _ask_read_paste_line; do
     if [[ "$line" == "-----BEGIN PRIVATE KEY-----" || "$line" == "-----BEGIN RSA PRIVATE KEY-----" || "$line" == "-----BEGIN EC PRIVATE KEY-----" ]]; then
       saw_key=1
       break
@@ -205,9 +211,7 @@ _ask_take_pasted_certs() {
   fi
 
   key="$line"$'\n'
-  while read -t 0; do
-    IFS= read -r line || die "Private key is missing"
-    line="${line%$'\r'}"
+  while _ask_read_paste_line; do
     if [[ -z "$line" ]]; then
       continue
     fi
